@@ -1,0 +1,56 @@
+<div id="abaCargaDescarga" class="tab-content hidden">
+  <div class="container-fluid mt-3">
+    <h4>🚚 Módulo Carga e Descarga > Agendamentos</h4>
+    <p class="text-muted">Painel consolidado por Unidade Gestora de processos pendentes de agendamento logístico.</p>
+
+    <div id="painelUgAgendamentos" class="accordion">
+      <div class="text-center p-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2">Carregando painel consolidado...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="abaCalendarioLogistico" class="tab-content hidden">
+  <div class="container-fluid mt-3">
+    <h4>📅 Módulo Carga e Descarga > Calendário de Serviços</h4>
+    <p class="text-muted">Consulte a programação de recolhimentos e transferências por data de atendimento.</p>
+
+    <div class="card shadow-sm p-3 mb-4 bg-light">
+      <div class="row align-items-center">
+        <div class="col-md-4">
+          <label for="filtroDataCalendario" class="font-weight-bold mb-1">Filtrar por data específica:</label>
+          <input type="date" id="filtroDataCalendario" class="form-control" onchange="buscarAgendaDaData()">
+        </div>
+        <div class="col-md-8 text-right mt-4">
+          <button class="btn btn-outline-primary" onclick="carregarAgendaCompleta()">Ver Próximos Agendamentos</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="containerCronogramaLogistico">
+      <div class="text-center p-4">
+        <p class="text-muted">Selecione uma data acima ou clique em 'Ver Próximos Agendamentos'.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .ug-header-btn {
+    width: 100%;
+    text-align: left;
+    font-weight: bold;
+    font-size: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #333;
+  }
+  .ug-header-btn:hover { background-color: #e9ecef; color: #000; text-decoration: none; }
+  .badge-rec { background-color: #ffc107; color: #212529; font-weight: bold; }
+  .badge-transf { background-color: #17a2b8; color: #fff; font-weight: bold; }
+</style>

@@ -1,0 +1,628 @@
+<style>
+/* 1. CORREÇÃO GLOBAL DO BOX-SIZING (O mais importante) */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif; /* Adicionado sans-serif como fallback */
+  margin: 0;
+  background: #f4f6f9;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* HEADER */
+header {
+  background: #1F4E78;
+  color: white;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+
+/* CONTAINER PRINCIPAL */
+.container {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto; /* Corrigido de margin: auto para centralizar melhor */
+  flex: 1;
+  width: 100%; /* Garante que ocupe o espaço disponível */
+}
+
+/* MENU */
+.menu {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+.menu button, .dropbtn {
+  background: #1F4E78;
+  color: white;
+  border: none;
+  padding: 10px 15px; /* Aumentado para melhor toque */
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: 0.2s;
+}
+
+.menu button:hover, .dropbtn:hover {
+  background: #163a5a;
+}
+
+/* DROPDOWN DO MENU */
+.menu-dropdown {
+  position: relative;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background: white;
+  min-width: 200px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border-radius: 4px;
+  z-index: 1000;
+  top: 100%; /* Garante que apareça abaixo do botão */
+}
+
+.dropdown-content a {
+  display: block;
+  padding: 10px;
+  font-size: 13px;
+  color: #333;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dropdown-content a:hover {
+  background: #f1f1f1;
+}
+
+.menu-dropdown:hover .dropdown-content {
+  display: block;
+}
+
+/* CARDS */
+.card {
+  background: white;
+  padding: 20px; /* Aumentado o respiro interno */
+  margin-bottom: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.section-title {
+  font-weight: bold;
+  margin: 15px 0 10px 0;
+  color: #1F4E78;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+/* GRID */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+}
+
+/* LABELS (Adicionado para organizar os textos acima dos inputs) */
+label {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+/* INPUTS (Corrigidos para não estourar) */
+input, select, textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  background-color: #fff;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #1F4E78;
+  box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.2);
+  outline: none;
+}
+
+/* TABELA */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background: white;
+}
+
+th {
+  background: #1F4E78;
+  color: white;
+  padding: 10px;
+  font-size: 13px;
+  text-align: left;
+}
+
+td {
+  border: 1px solid #eee;
+  padding: 8px;
+  font-size: 13px;
+}
+
+/* UTILITÁRIOS */
+.hidden {
+  display: none !important;
+}
+
+.dropdown { /* Dropdown de busca de servidores */
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1050;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* RODAPÉ */
+#rodapeSistema {
+  background: #1F4E78;
+  color: white;
+  text-align: center;
+  font-size: 11px;
+  padding: 10px;
+  margin-top: auto; /* Empurra o rodapé para o fim da página */
+}
+
+/* Botão de Salvar no formulário */
+#btnSalvar {
+    background-color: #28a745;
+    margin-top: 15px;
+    font-size: 16px;
+    padding: 12px;
+    width: 100%;
+}
+#btnSalvar:hover {
+    background-color: #218838;
+}
+
+/* CONTAINER DAS ABAS */
+.tabs-container {
+  display: flex;
+  border-bottom: 2px solid #ddd;
+  margin-bottom: 0; /* Cola no card abaixo */
+  gap: 5px;
+}
+
+/* CADA ABA INDIVIDUAL */
+.tab-link {
+  padding: 10px 20px;
+  cursor: pointer;
+  background: #e9ecef;
+  border: 1px solid #ddd;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  font-weight: bold;
+  color: #666;
+  transition: 0.3s;
+}
+
+/* ABA ATIVA (Selecionada) */
+.tab-link.active {
+  background: #ffffff;
+  color: #1F4E78;
+  border-bottom: 2px solid #ffffff; /* Esconde a borda de baixo */
+  margin-bottom: -2px; /* Garante o encaixe perfeito no card */
+  position: relative;
+  z-index: 2;
+}
+
+.tab-link:hover:not(.active) {
+  background: #dee2e6;
+}
+
+/* AJUSTE NO CARD PARA ENCAIXAR NA ABA */
+.tab-content.card {
+  margin-top: 0;
+  border-top-left-radius: 0;
+}
+
+/* MODAL OVERLAY */
+#modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; /* Deixe como flex aqui */
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+/* Garante que o hidden esconda mesmo o modal */
+#modalOverlay.hidden {
+  display: none !important;
+}
+
+#modalOverlay .card {
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+/* Melhoria visual dos Cards e Seções */
+.cadastro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8f9fa;
+  padding: 15px 20px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid #1F4E78;
+  margin-bottom: 20px;
+}
+
+.cadastro-header h2 {
+  margin: 0;
+  color: #1F4E78;
+  font-size: 1.5rem;
+}
+
+/* Item Card - Design de "Linha de Produção" */
+.item-card {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  position: relative;
+  transition: box-shadow 0.3s;
+}
+
+.item-card:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed #ced4da;
+  padding-bottom: 5px;
+}
+
+.item-ordem {
+  background: #1F4E78;
+  color: white;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+/* Botões de ação rápida */
+.btn-adicionar {
+  background-color: #1F4E78;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-limpar {
+  background-color: #6c757d;
+  color: white;
+  margin-top: 10px;
+}
+
+/* Badge de Resumo */
+.resumo-fixed {
+  position: sticky;
+  bottom: 20px;
+  background: #fff;
+  border: 2px solid #1F4E78;
+  padding: 15px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-around;
+  box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.item-linha-dupla {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f9f9f9;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #1F4E78;
+  margin-bottom: 10px;
+}
+.grid-linha-1 {
+  display: grid;
+  grid-template-columns: 3fr 1fr 0.1fr;
+  gap: 10px;
+}
+.grid-linha-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.valor-total-item {
+  font-weight: bold;
+  color: #1F4E78;
+  background: #eef2f7;
+  padding: 8px;
+  border-radius: 4px;
+  text-align: right;
+}
+
+.item-linha-multipla {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #ffffff;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-left: 5px solid #1F4E78;
+  margin-bottom: 15px;
+}
+
+.grid-qtd-valores {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr 1.2fr; /* Coluna de Qtd menor */
+  gap: 15px;
+  align-items: center;
+}
+
+.badge-rateio {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Overlay que ocupa a tela toda */
+.loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9); /* Fundo branco semi-transparente */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999; /* Fica acima de tudo */
+  flex-direction: column;
+}
+
+/* O círculo giratório */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #1F4E78; /* Azul UFPE */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+.loader-content {
+  text-align: center;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.loader-content p {
+  font-weight: bold;
+  color: #1F4E78;
+  margin: 0;
+}
+
+.loader-content small {
+  color: #666;
+}
+
+/* Animação de rotação */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Classe auxiliar para esconder */
+.hidden {
+  display: none !important;
+}
+
+/* Animação do círculo giratório */
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #1F4E78; /* Azul padrão UFPE */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Container da Home */
+.home-container {
+    padding: 40px 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.home-header {
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+.home-header h1 {
+    color: #1F4E78;
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+.home-header p {
+    font-size: 1.1rem;
+    color: #6c757d;
+}
+
+/* Grid de Cards */
+.menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 25px;
+    padding: 10px;
+}
+
+/* Estilização do Card de Menu */
+.menu-card {
+    background: #ffffff;
+    border-radius: 15px;
+    padding: 30px;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
+    border: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Efeito de Hover moderno */
+.menu-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 15px 30px rgba(31, 78, 120, 0.15);
+    border-color: #1F4E78;
+}
+
+.menu-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: #1F4E78;
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.menu-card:hover::before {
+    transform: scaleX(1);
+}
+
+/* Ícones do Menu */
+.menu-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    background: #f1f4f8;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.3s ease;
+}
+
+.menu-card:hover .menu-icon {
+    background: #e1e8f0;
+}
+
+.menu-card h3 {
+    color: #333;
+    margin: 10px 0;
+    font-size: 1.3rem;
+}
+
+.menu-card p {
+    color: #777;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-primary, .btn-secondary {
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: opacity 0.2s;
+}
+
+.btn-secondary:disabled {
+    background: #e0e0e0 !important;
+    color: #aaa !important;
+    cursor: not-allowed;
+}
+
+.btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+
+  /* Estilo customizado para os campos pendentes de preenchimento */
+  .alerta-pendente {
+    border: 1.5px solid #ffc107 !important;
+    background-color: #fffbeb !important;
+  }
+
+
+  .ug-header-btn {
+    width: 100%;
+    text-align: left;
+    font-weight: bold;
+    font-size: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #333;
+  }
+  .ug-header-btn:hover { background-color: #e9ecef; color: #000; text-decoration: none; }
+  .badge-rec { background-color: #ffc107; color: #212529; font-weight: bold; }
+  .badge-transf { background-color: #17a2b8; color: #fff; font-weight: bold; }
+  
+  /* 🔥 NOVA CLASSE ADICIONADA: Verde Institucional para Distribuição */
+  .badge-distrib { background-color: #28a745; color: #fff; font-weight: bold; }
+
+
+</style>

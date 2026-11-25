@@ -1,0 +1,143 @@
+<script>
+ // Variável global para guardar os dados processados na memória
+var dadosTransfMemoria = [];
+
+// Atualização da função que recebe os dados do backend
+function processarArquivoTransf() {
+  var input = document.getElementById("arquivoTransf");
+  var btn = document.getElementById("btnProcessarTransf");
+  
+  if (!input.files || input.files.length === 0) {
+    alert("Por favor, selecione um arquivo.");
+    return;
+  }
+  
+  var file = input.files[0];
+  var reader = new FileReader();
+  
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processando...';
+
+  reader.onload = function(e) {
+    var dataBytes = e.target.result.split(',')[1];
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Processar Planilha';
+        
+        if (res.sucesso) {
+          dadosTransfMemoria = res.dados; // Guarda em memória global
+          renderizarTabelaTransf(res.dados);
+        } else {
+          alert("Erro ao processar: " + res.erro);
+        }
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-gear-fill me-1"></i> Processar Planilha';
+        alert("Erro de comunicação com o servidor: " + err.message);
+      })
+      .processarRazaoTransferencias(dataBytes, file.name);
+  };
+
+  reader.readAsDataURL(file);
+}
+
+  // Função para popular a tabela com os dados processados (incluindo NL de saída e entrada)
+function renderizarTabelaTransf(dados) {
+  var tbody = document.getElementById("corpoTabelaTransf");
+  var container = document.getElementById("containerResultadosTransf");
+  var badge = document.getElementById("totalTransfBadge");
+  
+  tbody.innerHTML = "";
+  
+  if (!dados || dados.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted p-3">Nenhum registro de transferência encontrado.</td></tr>';
+    container.classList.remove("hidden");
+    badge.innerText = "0 registros";
+    return;
+  }
+
+  dados.forEach(function(item) {
+    var saidas = item.saidas || [];
+    var entradas = item.entradas || [];
+    // Determina a quantidade de linhas necessárias para exibir todas as entradas e saídas do documento
+    var maxLinhas = Math.max(saidas.length, entradas.length, 1);
+
+    for (var k = 0; k < maxLinhas; k++) {
+      var tr = document.createElement("tr");
+      var html = "";
+
+      // Na primeira linha do documento, cria a célula com rowspan agrupando o Nº Doc.
+      if (k === 0) {
+        html += '<td class="fw-bold text-center align-middle" rowspan="' + maxLinhas + '">' + item.numDocumento + '</td>';
+      }
+
+      // Renderiza Dados da Saída (incluindo NL)
+      var s = saidas[k];
+      if (s) {
+        var valSaida = (s.valor > 0)
+          ? Number(s.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+          : '-';
+        html += '<td class="text-center font-monospace">' + (s.nl || '-') + '</td>' +
+                '<td class="text-center">' + (s.conta || '-') + '</td>' +
+                '<td class="text-center">' + (s.ug || '-') + '</td>' +
+                '<td class="text-end font-monospace text-danger">' + valSaida + '</td>';
+      } else {
+        html += '<td class="text-center">-</td><td class="text-center">-</td><td class="text-center">-</td><td class="text-center">-</td>';
+      }
+
+      // Renderiza Dados da Entrada (incluindo NL)
+      var e = entradas[k];
+      if (e) {
+        var valEntrada = (e.valor > 0)
+          ? Number(e.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+          : '-';
+        html += '<td class="text-center font-monospace">' + (e.nl || '-') + '</td>' +
+                '<td class="text-center">' + (e.conta || '-') + '</td>' +
+                '<td class="text-center">' + (e.ug || '-') + '</td>' +
+                '<td class="text-end font-monospace text-success">' + valEntrada + '</td>';
+      } else {
+        html += '<td class="text-center">-</td><td class="text-center">-</td><td class="text-center">-</td><td class="text-center">-</td>';
+      }
+
+      tr.innerHTML = html;
+      tbody.appendChild(tr);
+    }
+  });
+
+  badge.innerText = dados.length + " transferências";
+  container.classList.remove("hidden");
+}
+
+// Função executada ao clicar no botão 'Gravar'
+function salvarTransfNoDocumento() {
+  if (!dadosTransfMemoria || dadosTransfMemoria.length === 0) {
+    alert("Não há dados de transferência processados para gravar.");
+    return;
+  }
+
+  var btn = document.getElementById("btnSalvarTransf");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Gravando...';
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-save-fill me-1"></i> Gravar em DOCUMENTO_MOVIMENTO';
+
+      if (res.sucesso) {
+        alert("Sucesso! " + res.quantidade + " registro(s) gravado(s) com sucesso na aba DOCUMENTO_MOVIMENTO.");
+      } else {
+        alert("Erro ao gravar dados: " + res.erro);
+      }
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-save-fill me-1"></i> Gravar em DOCUMENTO_MOVIMENTO';
+      alert("Erro de comunicação ao salvar: " + err.message);
+    })
+    .salvarDadosTransferencia(dadosTransfMemoria);
+}
+</script>

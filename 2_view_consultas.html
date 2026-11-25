@@ -1,0 +1,25 @@
+<!-- ================= CADMAT ================= -->
+<div id="abaCadmat" class="hidden">
+  <div class="card">
+    <div class="section-title">Consulta CADMAT</div>
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+      <input id="buscaCadmat" placeholder="Digite palavra-chave" style="flex: 1;">
+      <button onclick="consultarCadmat()">Buscar</button>
+    </div>
+    <div id="resultadoCadmat"></div>
+    <div id="paginacaoCadmat" style="margin-top: 15px; display: flex; justify-content: center; align-items: center; gap: 15px;"></div>
+  </div>
+</div>
+
+<!-- ================= CONVERSÃO ================= -->
+<div id="abaConversao" class="hidden">
+  <div class="card">
+    <div class="section-title">Consulta e Conversão de Tombos (Lote)</div>
+    <p style="font-size: 0.85rem; color: #7f8c8d; margin-top: -10px; margin-bottom: 15px;">
+      Insira os números dos tombos abaixo (um por linha). O sistema identificará automaticamente se é SIPAC ou SIADS e trará a correspondência cruzada.
+    </p>
+    <textarea id="tomboBusca" rows="8" placeholder="Digite tombos SIADS ou SIPAC (um por linha)"></textarea>
+    <button onclick="converterTomboLote()">Buscar / Converter</button>
+    <div id="resultadoConversao"></div>
+  </div>
+</div>

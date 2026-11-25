@@ -1,0 +1,45 @@
+<div id="abaSaidas" class="tab-content hidden">
+  <div class="container-fluid mt-3">
+    <h4>📦 Saídas > Informar Saída</h4>
+    <p class="text-muted">Registro de baixas administrativas, doações, vendas e inutilizações de patrimônios.</p>
+
+    <div class="card mb-4 border-danger shadow-sm">
+      <div class="card-header bg-danger text-white font-weight-bold">Formulário de Registro de Saída</div>
+      <div class="card-body">
+        <form id="formRegistrarSaida" onsubmit="event.preventDefault(); enviarDadosSaida();">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">Número do Processo</label>
+              <input type="text" id="saiProcesso" class="form-control" required placeholder="Ex: 23076.XXXXXX/2026-XX">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">Data da Saída</label>
+              <input type="date" id="saiDataSaida" class="form-control" required>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">Tipo de Saída</label>
+              <select id="saiTipo" class="form-control" required>
+                <option value="" disabled selected>Selecione uma opção...</option>
+                <option value="BAIXA ADMINISTRATIVA">BAIXA ADMINISTRATIVA</option>
+                <option value="DOAÇÃO/VENDA">DOAÇÃO/VENDA</option>
+                <option value="INUTILIZAÇÃO/ABANDONO">INUTILIZAÇÃO/ABANDONO</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12 mb-3">
+              <label class="font-weight-bold">Números de Tombamento (Separe por vírgula, espaço ou quebra de linha)</label>
+              <textarea id="saiTombamentos" class="form-control" rows="4" required placeholder="Ex: 123456, 123457, 123458"></textarea>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <button type="reset" class="btn btn-secondary mr-2">Limpar</button>
+            <button type="submit" class="btn btn-danger font-weight-bold px-4">Salvar Registro 💾</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

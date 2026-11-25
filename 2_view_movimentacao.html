@@ -1,0 +1,505 @@
+<!-- ================= MOVIMENTAÇÃO ================= -->
+<!-- ================= transferencia ================= -->
+<div id="abaMovimentacao" class="hidden">
+  <div class="section-title">Transferência e Movimentação de Bens</div>
+
+  <div class="tabs-container">
+    <div class="tab-link active" onclick="alternarTabTransferencia(event, 'cadastro')">1. Cadastro</div>
+    <div id="tabTombosMov" class="tab-link" onclick="alternarTabTransferencia(event, 'tombos')">2. Informar Tombos</div>
+    <div class="tab-link" onclick="alternarTabTransferencia(event, 'mac')">3. Gerar MAC</div>
+  </div>
+
+  <div id="subAbaCadMov" class="tab-content card">
+    
+    <div class="section-title">Tipo de Operação</div>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+      <div>
+        <label>Tipo de Transferência</label>
+        <select id="movTipoTransf" onchange="ajustarCargaDescarga()">
+          <option value="">Selecione...</option>
+          <option value="Movimentação Interna">Movimentação Interna</option>
+          <option value="Transferência">Transferência</option>
+          <option value="Reaproveitamento">Reaproveitamento</option>
+          <option value="Distribuição de Bens">Distribuição de Bens</option>
+        </select>
+      </div>
+      <div>
+        <label>Apoio de Carga e Descarga?</label>
+        <select id="movCargaDescarga">
+          <option value="NÃO">NÃO</option>
+          <option value="SIM">SIM</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="blocoUploadMovimentacao" class="hidden" style="margin-top: 15px; background: #fdfdfd; padding: 12px; border: 1px dashed #ced4da; border-radius: 4px;">
+      <label for="arquivoSolicitacao" style="font-weight: bold; color: #1F4E78;">Anexar Solicitação de Movimentação (PDF/Imagem)</label>
+      <input type="file" id="arquivoSolicitacao" accept=".pdf,image/*" 
+             style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px; background: #fff; margin-top: 5px;">
+      <small style="color: #6c757d; display: block; margin-top: 4px;">⚠️ Arquivo digital obrigatório para prosseguir com a Movimentação Interna.</small>
+    </div>
+
+    <div class="section-title" style="margin-top: 20px;">Dados do Processo</div>
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 15px;">
+      <div><label>Prefixo</label><input value="23076" readonly style="background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; padding: 8px; width: 100%; box-sizing: border-box;"></div>
+      <div><label>Número</label><input id="movProcNum" maxlength="6" placeholder="000000" style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px; width: 100%; box-sizing: border-box;"></div>
+      <div><label>Ano</label><select id="movProcAno" style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px; width: 100%; box-sizing: border-box; height: 38px;"></select></div>
+      <div><label>Dígito</label><input id="movProcDig" maxlength="2" placeholder="00" style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px; width: 100%; box-sizing: border-box;"></div>
+    </div>
+    <div class="grid" style="grid-template-columns: 200px; margin-top: 15px;">
+       <div><label>Data de Envio à DBM</label><input id="movDataEnvio" type="date" style="border: 1px solid #ced4da; border-radius: 4px; padding: 8px; width: 100%; box-sizing: border-box;"></div>
+    </div>
+
+    <div id="blocoOrigemTransferencia" class="hidden" style="margin-top: 20px;">
+      <div class="section-title">Dados de Origem no Processo</div>
+      
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div style="position: relative;">
+          <label for="buscaMovUgOrigem">UG de Origem do processo de transferência</label>
+          <input type="text" id="buscaMovUgOrigem" placeholder="Digite o código, descrição ou sigla..." 
+                 oninput="buscarMovUgOrigemDinamico(this.value)" autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+          <div id="resBuscaMovUgOrigem" 
+               style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+          </div>
+          <input type="hidden" id="movUgOrigem" name="movUgOrigem">
+        </div>
+
+        <div style="position: relative;">
+          <label for="buscaMovUorgOrigem">UORG de origem do processo de transferencia</label>
+          <input type="text" id="buscaMovUorgOrigem" placeholder="Selecione primeiro a UG de origem..." disabled
+                 oninput="buscarMovUorgOrigemDinamico(this.value)" autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+          <div id="resBuscaMovUorgOrigem" 
+               style="position: absolute; z-index: 1050; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+          </div>
+          <input type="hidden" id="movUorgOrigem" name="movUorgOrigem">
+        </div>
+      </div> <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px;">
+        <div>
+          <label>Servidor que Acompanhará a Retirada</label>
+          <input type="text" id="movServidorRetirada" placeholder="Nome completo" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label>Telefone do Servidor da Retirada</label>
+          <input type="text" id="movTelRetirada" placeholder="(00) 00000-0000" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label>E-mail do Servidor da Retirada</label>
+          <input type="email" id="movEmailRetirada" placeholder="servidor@email.com" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+      </div> </div> <div id="blocoDestinoFixo" style="margin-top: 25px; margin-bottom: 25px;">
+      <div class="section-title">Dados de Destino</div>
+      
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div style="position: relative;">
+          <label for="buscaMovUgDestino">UG Destino</label>
+          <input type="text" id="buscaMovUgDestino" placeholder="Digite o código, descrição ou sigla..." 
+                 oninput="buscarMovUgDestinoDinamico(this.value)" autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+          <div id="resBuscaMovUgDestino" 
+               style="position: absolute; z-index: 1040; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+          </div>
+          <input type="hidden" id="movUgDestino" name="movUgDestino">
+        </div>
+
+        <div style="position: relative;">
+          <label for="buscaMovUorgDestino">UORG Destino</label>
+          <input type="text" id="buscaMovUorgDestino" placeholder="Selecione primeiro a UG de destino..." disabled
+                 oninput="buscarMovUorgDestinoDinamico(this.value)" autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+          <div id="resBuscaMovUorgDestino" 
+               style="position: absolute; z-index: 1030; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 180px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+          </div>
+          <input type="hidden" id="movUorgDestino" name="movUorgDestino">
+        </div>
+      </div> <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px;">
+        <div>
+          <label>Servidor que Acompanhará a Entrega</label>
+          <input type="text" id="movServidorEntrega" placeholder="Nome completo" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label>Telefone do Servidor da Entrega</label>
+          <input type="text" id="movTelEntrega" placeholder="(00) 00000-0000" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+        <div>
+          <label>E-mail do Servidor da Entrega</label>
+          <input type="email" id="movEmailEntrega" placeholder="servidor@email.com" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        </div>
+      </div> </div>
+
+
+    <div style="margin-top: 25px; border-top: 1px solid #eee; padding-top: 15px;">
+      <button onclick="salvarProcessoTransferencia()" class="btn-primary" style="background: #1F4E78; color: white; padding: 10px 24px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">💾 Salvar Processo</button>
+    </div>
+    
+  </div>
+
+  <div id="subAbaTombosMov" class="tab-content card hidden">
+     <div class="section-title">Localizar Processo Salvo</div>
+     <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div><label>Prefixo</label><input value="23076" readonly></div>
+        <div><label>Número</label><input id="movBuscaNum" maxlength="6"></div>
+        <div><label>Ano</label><select id="movBuscaAno"></select></div>
+        <div><label>Dígito</label><input id="movBuscaDig" maxlength="2"></div>
+     </div>
+     <button style="margin-top:10px;" onclick="buscarProcessoTransferenciaFront()">Prosseguir</button>
+     
+     <div id="dadosProcessoMov" style="margin-top:10px;"></div>
+     <div id="blocoTombosMov" class="hidden">
+        <div class="section-title">Adicionar Bens</div>
+        <textarea id="inputTombosMov" rows="5" placeholder="Um tombo por linha"></textarea>
+        <button onclick="adicionarTombosMov()">Adicionar</button>
+        <div id="renderTombosMov"></div>
+        <div id="resumoMovimentacao" class="hidden"></div>
+     </div>
+  </div>
+
+  <div id="subAbaMacMov" class="tab-content card hidden">
+    <div class="section-title">Gerar Comando MAC (Movimentação)</div>
+    
+    <div class="grid" style="grid-template-columns: 250px 150px; gap: 15px; align-items: flex-end; margin-bottom: 20px;">
+      <div>
+        <label for="buscaSeqMacMov">Sequencial do Documento</label>
+        <input type="number" id="buscaSeqMacMov" placeholder="Ex: 2026000001" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+      </div>
+      <div>
+        <button onclick="gerarTextoMacMov()" class="btn-primary" style="height: 38px; width: 100%; background: #1F4E78; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">🔍 Gerar Texto</button>
+      </div>
+    </div>
+
+    <div id="resultadoMacMov" class="hidden" style="margin-top:20px;">
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">Texto Gerado para o SIADS:</label>
+      <textarea id="outputMacMov" readonly 
+                style="width:100%; height:180px; font-family:monospace; background: #f8f9fa; border: 1px solid #ddd; padding: 10px; border-radius: 4px; box-sizing: border-box; resize: none; margin-bottom: 15px;"></textarea>
+       
+      <div style="display: flex; gap: 10px;">
+        <button onclick="navigator.clipboard.writeText(document.getElementById('outputMacMov').value).then(() => alert('Texto copiado para a área de transferência!'))" 
+                style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+          📋 Copiar Texto
+        </button>
+        <button onclick="baixarArquivoMacMov()" 
+                style="background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+          💾 Baixar Arquivo .mac
+        </button>
+        <button onclick="document.getElementById('resultadoMacMov').classList.add('hidden')" 
+                style="background-color: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+          Limpar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= recolhimento ================= -->
+<div id="abaRecolhimento" class="hidden">
+  <div class="section-title">Recolhimento de Bens</div>
+
+  <div class="tabs-container">
+    <div class="tab-link active" onclick="alternarTabRecolhimento(event, 'processo')">
+      1. Cadastro de Processo
+    </div>
+    <div class="tab-link" onclick="alternarTabRecolhimento(event, 'tombos')">
+      2. Informar Tombos
+    </div>
+    <div class="tab-link" onclick="alternarTabRecolhimento(event, 'mac')">
+      3. Gerar MAC
+    </div>
+  </div>
+
+  <div id="subAbaProcesso" class="tab-content card">
+    <div class="section-title">Nº do Processo</div>
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div>
+        <label>Prefixo</label>
+        <input value="23076" readonly>
+      </div>
+      <div>
+        <label>Número</label>
+        <input id="procNumero" maxlength="6" placeholder="000000">
+      </div>
+      <div>
+        <label>Ano</label>
+        <select id="procAno"></select>
+      </div>
+      <div>
+        <label>Dígito Final</label>
+        <input id="procFinal" maxlength="2" placeholder="00">
+      </div>
+    </div>
+
+    <div class="section-title">Dados do Processo</div>
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div>
+        <label>Data do Processo</label>
+        <input id="recData" type="date">
+      </div>
+      <div>
+        <label>UG</label>
+        <select id="ugRecolhimento"></select>
+      </div>
+      <div>
+        <label>Local do Recolhimento</label>
+        <input id="recDepartamento">
+      </div>
+      <div>
+        <label>Quantidade de Bens</label>
+        <input id="recQtd" type="number">
+      </div>
+    </div>
+
+    <div class="section-title">Solicitação de Recolhimento</div>
+    <div class="grid" style="grid-template-columns: 1fr;">
+      <div>
+        <input type="file" id="recArquivo">
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button onclick="salvarProcessoRecolhimento()">Salvar Processo</button>
+    </div>
+  </div>
+
+  <div id="subAbaTombos" class="tab-content card hidden">
+    <div class="section-title">Nº do Processo</div>
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div>
+        <label>Prefixo</label>
+        <input value="23076" readonly>
+      </div>
+      <div>
+        <label>Número</label>
+        <input id="procNumeroBusca" maxlength="6" placeholder="000000">
+      </div>
+      <div>
+        <label>Ano</label>
+        <select id="procAnoBusca"></select>
+      </div>
+      <div>
+        <label>Dígito Final</label>
+        <input id="procFinalBusca" maxlength="2" placeholder="00">
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button id="btnProsseguirTombos" onclick="buscarProcessoRecolhimentoFront()">Prosseguir</button>
+    </div>
+
+    <div id="dadosProcessoRec" style="margin-top:10px;"></div>
+
+    <div id="blocoDataColeta" class="card hidden">
+      <div class="section-title">Dados da Coleta</div>
+      <div class="grid" style="grid-template-columns: 250px;">
+        <div>
+          <label>Data da Coleta</label>
+          <input id="dataColeta" type="date">
+        </div>
+      </div>
+    </div>
+
+    <div id="blocoTombosRec" class="hidden">
+      <div class="section-title">Adicionar Bens</div>
+      <div class="card">
+        <textarea id="inputTombosRec" rows="5" placeholder="Um tombo por linha"></textarea>
+        <button onclick="adicionarTombosRec()">Adicionar</button>
+      </div>
+      <div id="listaTombosRecRender"></div>
+      <div id="resumoRecolhimento" class="hidden"></div>
+    </div>
+  </div>
+
+  <div id="subAbaMac" class="tab-content card hidden">
+    <div class="section-title">Gerar Comando MAC (Recolhimento)</div>
+    
+    <div class="grid" style="grid-template-columns: 250px 150px; gap: 15px; align-items: flex-end; margin-bottom: 20px;">
+      <div>
+        <label for="buscaSequencialMac">Sequencial do Documento</label>
+        <input type="number" id="buscaSequencialMac" placeholder="Ex: 2026000001" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+      </div>
+      <div>
+        <button id="btnGerarMac" onclick="gerarTextoMac()" class="btn-primary" style="height: 38px; width: 100%; background: #1F4E78; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">🔍 Gerar Texto</button>
+      </div>
+    </div>
+
+    <div id="resultadoMac" class="hidden" style="margin-top: 20px;">
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">Texto Gerado para o SIADS:</label>
+      <textarea id="outputMac" readonly 
+                style="width: 100%; height: 180px; font-family: monospace; background: #f8f9fa; border: 1px solid #ddd; padding: 10px; border-radius: 4px; box-sizing: border-box; resize: none; margin-bottom: 15px;"></textarea>
+  
+      <div style="display: flex; gap: 10px;">
+        <button onclick="copiarTextoMac()" 
+                style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+          📋 Copiar Texto
+        </button>
+        <button onclick="baixarArquivoMac()" 
+                style="background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+          💾 Baixar Arquivo .mac
+        </button>
+        <button onclick="document.getElementById('resultadoMac').classList.add('hidden')" 
+                style="background-color: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+          Limpar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  </div> 
+
+<div id="abaInformarNLMovimento" class="container-fluid mt-4 hidden">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
+      <i class="bi bi-arrow-left-right"></i>
+      <h5 class="mb-0">Informar NL de Movimentação (Transferências entre UG's)</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Mês de Referência:</label>
+          <select id="movNlMes" class="form-select">
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Ano:</label>
+          <select id="movNlAno" class="form-select">
+            </select>
+        </div>
+        <div class="col-md-4">
+          <button id="btnBuscarMovNL" class="btn btn-dark w-100" onclick="buscarMovimentacoesNL()">
+            <i class="bi bi-search"></i> Filtrar Movimentações
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="containerResultadoMovNL" class="hidden" style="margin-top: 20px;">
+  <div class="section-title">Movimentações Encontradas</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered style-table-nl">
+      <thead class="thead-dark text-center" style="font-size: 0.85rem;">
+        <tr>
+          <th colspan="5" class="bg-secondary text-white">Dados da Movimentação</th>
+          <th colspan="3" class="bg-danger text-white">Lançamento de SAÍDA</th>
+          <th colspan="3" class="bg-success text-white">Lançamento de ENTRADA</th>
+          <th rowspan="2" class="align-middle bg-dark text-white" style="width: 50px;">Ação</th>
+        </tr>
+        <tr>
+          <th style="width: 100px;">Sequencial</th> <th style="width: 100px;">Processo</th>
+          <th style="width: 90px;">Tipo</th>
+          <th style="width: 80px;">Data</th>
+          <th style="width: 140px;">Origem / Destino</th>
+          
+          <th style="width: 110px;">Nota de Lançamento</th>
+          <th style="width: 180px;">Conta Contábil</th>
+          <th style="width: 100px;">Valor (R$)</th>
+          
+          <th style="width: 110px;">Nota de Lançamento</th>
+          <th style="width: 180px;">Conta Contábil</th>
+          <th style="width: 100px;">Valor (R$)</th>
+        </tr>
+      </thead>
+      <tbody id="corpoTabelaMovNL">
+        </tbody>
+    </table>
+  </div>
+  
+  <div class="text-right mt-3" style="text-align: right; margin-bottom: 20px;">
+    <button id="btnSalvarMovNL" class="btn btn-success px-4" onclick="gravarMovimentacoesNL()">
+      <i class="bi bi-save"></i> Salvar Alterações
+    </button>
+  </div>
+</div>
+</div>
+
+<style>
+  /* Alerta campos vazios pendentes */
+  .alerta-pendente {
+    border: 1.5px solid #ffc107 !important;
+    background-color: #fffbeb !important;
+  }
+  
+  /* Força caixa alta automática nos inputs de NL */
+  .uppercase-input {
+    text-transform: uppercase;
+  }
+
+  /* Estilização moderna e limpa para o Botão de Adicionar (+) */
+  .btn-action-add {
+    background: none;
+    border: none;
+    color: #0d6efd;
+    font-size: 1.35rem;
+    padding: 0;
+    line-height: 1;
+    transition: transform 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-action-add:hover {
+    color: #0a58ca;
+    transform: scale(1.18);
+  }
+
+  /* Estilização moderna e limpa para o Botão de Deletar/Lixeira */
+  .btn-action-del {
+    background: none;
+    border: none;
+    color: #dc3545;
+    font-size: 1.2rem;
+    padding: 0;
+    line-height: 1;
+    transition: transform 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+  }
+  .btn-action-del:hover {
+    color: #a71d2a;
+    transform: scale(1.18);
+  }
+
+  /* Estilo visual para linhas clonadas/desmembradas */
+  .linha-clonada {
+    background-color: #f8f9fa !important;
+    border-left: 3px solid #0d6efd !important;
+  }
+  .linha-clonada input, .linha-clonada select {
+    background-color: #ffffff;
+  }
+
+  /* Estilização para a tabela de notas de lançamento */
+.style-table-nl th {
+  vertical-align: middle !important;
+  font-weight: 600;
+}
+
+.style-table-nl td {
+  vertical-align: middle !important;
+  padding: 4px 6px !important;
+}
+
+.style-table-nl .form-control-sm {
+  height: calc(1.5em + 0.5rem + 2px) !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.82rem !important;
+}
+
+/* Alerta sutil para linhas com dados pendentes */
+.alerta-pendente td {
+  background-color: #fff9e6 !important;
+}
+
+/* Classes utilitárias */
+.hidden {
+  display: none !important;
+}
+</style>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  
+  <?!= include('0_styles'); ?>
+</head>
+
+<body>
+  <?!= include('1_layout_header'); ?>
+  <?!= include('1_layout_menu'); ?>
+
+  <div class="container">
+    <?!= include('2_view_home'); ?>
+    <?!= include('2_view_cadastro'); ?>
+    <?!= include('2_view_consultas'); ?>
+    <?!= include('2_view_relatorios'); ?>
+    <?!= include('2_view_movimentacao'); ?>
+    <?!= include('2_view_utilitarios'); ?>
+    <?!= include('2_view_contabil'); ?>
+    <?!= include('2_view_saidas'); ?>
+    <?!= include('2_view_carga_descarga'); ?>
+    <?!= include('2_view_configuracoes'); ?>
+
+  </div>
+
+  <div id="loader" class="hidden">Carregando...</div>
+  <div id="modalOverlay" class="hidden" onclick="fecharModal()">
+    <div class="card">
+      <h2 id="modalTitulo"></h2>
+      <p id="modalMensagem"></p>
+      <button onclick="fecharModal()">Fechar</button>
+    </div>
+  </div>
+
+  <?!= include('1_layout_footer'); ?>
+  
+  <?!= include('3_scripts'); ?>
+  <?!= include('3.3_scripts_contabil_relentrada'); ?>
+  <?!= include('3.3_scripts_contabil_moventrada'); ?>
+  <?!= include('3.3_scripts_contabil_importarRMB'); ?>
+  <?!= include('3.3_scripts_contabil_mapa'); ?>
+  <?!= include('3.3_scripts_contabil_razaomovimento'); ?>
+  <?!= include('3.1_scripts_registro_nl'); ?>
+  <?!= include('3.2_scripts_movimento_nl'); ?>
+  <?!= include('3.2_scripts_movimento'); ?>
+  <?!= include('3.4_scripts_saidas'); ?>
+  <?!= include('3.5_scripts_carga_descarga'); ?>
+  <?!= include('3.6_scripts_consultas'); ?>
+  <?!= include('3.9_scripts_configuracoes_usuario'); ?>
+  <?!= include('3.9_scripts_configuracoes_cadmat'); ?>
+
+
+</body>
+</html>

@@ -1,0 +1,36 @@
+<script>
+// Envia os dados do formulário de Saídas para o Servidor Google
+function enviarDadosSaida() {
+  const payload = {
+    processo: document.getElementById("saiProcesso").value.trim(),
+    dataSaida: document.getElementById("saiDataSaida").value,
+    tipo: document.getElementById("saiTipo").value,
+    tombamentos: document.getElementById("saiTombamentos").value.trim()
+  };
+
+  if (typeof mostrarLoader === "function") mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (typeof esconderLoader === "function") esconderLoader();
+      
+      if (resp === "OK") {
+        if (typeof abrirModal === "function") {
+          abrirModal("Sucesso", "Registro de saída efetuado com sucesso!");
+        } else {
+          alert("Registro de saída efetuado com sucesso!");
+        }
+        document.getElementById("formRegistrarSaida").reset();
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (typeof esconderLoader === "function") esconderLoader();
+      if (typeof abrirModal === "function") {
+        abrirModal("Erro ao Salvar", err.message);
+      } else {
+        alert("Erro ao salvar: " + err.message);
+      }
+    })
+    .salvarSaidaPainel(payload);
+}
+</script>

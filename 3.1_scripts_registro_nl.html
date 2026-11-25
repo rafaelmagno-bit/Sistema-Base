@@ -1,0 +1,122 @@
+<script>
+// Cache em memória local para armazenar os mapeamentos de linhas retornados do servidor
+let dadosNotasNLLocalizadas = null;
+
+function buscarDadosNL() {
+  const input = document.getElementById("nlBuscaSequencial");
+  const btn = document.getElementById("btnBuscarNL");
+  const container = document.getElementById("containerResultadoNL");
+  const corpoTabela = document.getElementById("corpoTabelaNL");
+
+  const sequencial = input.value.trim();
+  if (!sequencial) {
+    alert("Por favor, informe o número sequencial antes de pesquisar.");
+    return;
+  }
+
+  if (sequencial.length !== 10) {
+    alert("⚠️ O número sequencial deve conter exatamente 10 dígitos (ex: Ano + 6 dígitos).");
+    input.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buscando...';
+  container.classList.add("hidden");
+  corpoTabela.innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = "Buscar Registro";
+
+      if (!res.sucesso) {
+        alert("⚠️ " + res.message);
+        return;
+      }
+
+      dadosNotasNLLocalizadas = res.notas; // Salva dados no cache local
+      let htmlRows = "";
+
+      // Renderiza uma linha para cada Nota Fiscal encontrada dentro do mesmo Sequencial
+      res.notas.forEach((nota, index) => {
+        htmlRows += `
+          <tr>
+            <td class="fw-bold text-dark">${nota.tipoEntrada}</td>
+            <td>${nota.processo}</td>
+            <td class="fw-bold text-secondary">${nota.ug}</td>
+            <td class="font-monospace">${nota.documentoNF}</td>
+            <td class="text-end fw-bold text-primary">${nota.valorTotalNF.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td>
+              <input type="text" id="inputNL_${index}" class="form-control form-control-sm font-weight-bold" 
+                     value="${nota.nlCurrent || nota.nlAtual}" placeholder="Informe o número da NL (Ex: 2026NL00001)" style="text-transform: uppercase;">
+            </td>
+          </tr>
+        `;
+      });
+
+      corpoTabela.innerHTML = htmlRows;
+      container.classList.remove("hidden");
+    })
+    .withFailureHandler(err => {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buscando...';
+      alert("Erro crítico na comunicação com o servidor: " + err.message);
+    })
+    .buscarRegistroParaNL(sequencial);
+}
+
+function gravarDadosNL() {
+  if (!dadosNotasNLLocalizadas || dadosNotasNLLocalizadas.length === 0) return;
+
+  const btn = document.getElementById("btnSalvarNL");
+  const payloadSalvar = [];
+
+  // Captura os valores digitados em cada input gerado dinamicamente
+  for (let i = 0; i < dadosNotasNLLocalizadas.length; i++) {
+    const inputNL = document.getElementById(`inputNL_${i}`);
+    const valorNL = inputNL ? inputNL.value.trim() : "";
+
+    if (!valorNL) {
+      if (!confirm(`A nota fiscal ${dadosNotasNLLocalizadas[i].documentoNF} está sem número de NL. Deseja prosseguir assim mesmo?`)) {
+        return;
+      }
+    }
+
+    payloadSalvar.push({
+      linhas: dadosNotasNLLocalizadas[i].linhasPlanilha,
+      nl: valorNL
+    });
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle"></i> Salvar NL(s)';
+
+      if (!res.sucesso) {
+        alert("⚠️ Erro ao salvar: " + res.message);
+        return;
+      }
+
+      alert("🎉 " + res.message);
+      limparTelaNL();
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle"></i> Salvar NL(s)';
+      alert("Falha no servidor ao salvar dados da NL: " + err.message);
+    })
+    .salvarNLRegistro(payloadSalvar);
+}
+
+function limparTelaNL() {
+  document.getElementById("nlBuscaSequencial").value = "";
+  document.getElementById("containerResultadoNL").classList.add("hidden");
+  document.getElementById("corpoTabelaNL").innerHTML = "";
+  dadosNotasNLLocalizadas = null;
+}
+</script>

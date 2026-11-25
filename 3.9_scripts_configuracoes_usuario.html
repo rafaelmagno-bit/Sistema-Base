@@ -1,0 +1,110 @@
+<script>
+
+// ✅ Duas barras no comentário para evitar quebra de sintaxe
+// Inicializador do módulo: Deve ser chamado ao abrir a aba de Configurações
+function inicializarModuloUsuarios() {
+  carregarListaUsuarios();
+}
+
+// Busca a lista no servidor e renderiza dinamicamente na tabela HTML
+function carregarListaUsuarios() {
+  const corpoTabela = document.getElementById("corpoTabelaUsuarios");
+  
+  // Se houver qualquer erro de ID no HTML, este alerta vai avisar em vez de travar em silêncio
+  if (!corpoTabela) {
+    alert("Erro de ligação: O elemento HTML 'corpoTabelaUsuarios' não foi encontrado na página.");
+    return;
+  }
+
+  // Altera o texto imediatamente para sabermos que o JavaScript foi acionado com sucesso
+  corpoTabela.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">⏳ Conectando ao servidor...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      corpoTabela.innerHTML = "";
+      
+      if (!usuarios || usuarios.length === 0) {
+        corpoTabela.innerHTML = '<tr><td colspan="4" class="text-center text-warning py-3">Nenhum usuário cadastrado na aba PERFIS.</td></tr>';
+        return;
+      }
+
+      usuarios.forEach(usr => {
+        const tr = document.createElement("tr");
+        
+        // Define tags de cor personalizadas baseadas no tipo de perfil
+        let badgeClass = "badge-secondary";
+        if (usr.perfil === "ADMIN") badgeClass = "badge-danger";
+        if (usr.perfil === "DBM" || usr.perfil === "OPERADOR") badgeClass = "badge-info"; // Customizado para DBM
+
+        tr.innerHTML = `
+          <td class="align-middle font-weight-bold" style="color: #1F4E78;">${usr.nome}</td>
+          <td class="align-middle text-muted">${usr.email}</td>
+          <td class="align-middle text-center">
+            <span class="badge ${badgeClass} p-2" style="font-size:0.85rem;">${usr.perfil}</span>
+          </td>
+          <td class="align-middle text-center">
+            <button class="btn btn-sm btn-warning mr-1" title="Editar" 
+              onclick="carregarFormParaEdicao('${usr.nome}', '${usr.email}', '${usr.perfil}')">✏️</button>
+            <button class="btn btn-sm btn-danger" title="Excluir" 
+              onclick="solicitarExclusaoUsuario('${usr.email}')">❌</button>
+          </td>
+        `;
+        corpoTabela.appendChild(tr);
+      });
+    })
+    .withFailureHandler(function(err) {
+      corpoTabela.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">⚠️ Erro no servidor: ${err.message}</td></tr>`;
+    })
+    .listarUsuariosPainel();
+}
+
+function enviarDadosUsuario() {
+  const payload = {
+    nome: document.getElementById("usrNome").value.trim(),
+    email: document.getElementById("usrEmail").value.trim(),
+    perfil: document.getElementById("usrPerfil").value
+  };
+
+  if(typeof mostrarLoader === "function") mostrarLoader();
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if(typeof esconderLoader === "function") esconderLoader();
+      if (resp === "OK") {
+        if(typeof abrirModal === "function") abrirModal("Sucesso", "Operação realizada com sucesso!");
+        document.getElementById("formGerenciarUsuario").reset();
+        document.getElementById("usrEmail").disabled = false;
+        carregarListaUsuarios();
+      }
+    })
+    .withFailureHandler(function(err) {
+      if(typeof esconderLoader === "function") esconderLoader();
+      if(typeof abrirModal === "function") abrirModal("Erro", err.message);
+    })
+    .salvarUsuarioPainel(payload);
+}
+
+function carregarFormParaEdicao(nome, email, perfil) {
+  document.getElementById("usrNome").value = nome;
+  document.getElementById("usrEmail").value = email;
+  document.getElementById("usrEmail").disabled = true;
+  document.getElementById("usrPerfil").value = perfil;
+  document.getElementById("cardFormUsuario").scrollIntoView({ behavior: 'smooth' });
+}
+
+function solicitarExclusaoUsuario(email) {
+  if (confirm(`Deseja revogar o acesso do usuário ${email}?`)) {
+    if(typeof mostrarLoader === "function") mostrarLoader();
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if(typeof esconderLoader === "function") esconderLoader();
+        carregarListaUsuarios();
+      })
+      .withFailureHandler(function(err) {
+        if(typeof esconderLoader === "function") esconderLoader();
+        alert("Erro ao excluir: " + err.message);
+      })
+      .excluirUsuarioPainel(email);
+  }
+}
+
+</script>

@@ -1,0 +1,377 @@
+<script>
+function inicializarAnosMapaRmb() {
+  const selectAno = document.getElementById("mapaRmbAno");
+  if (selectAno) {
+    const anoAtual = new Date().getFullYear();
+    selectAno.innerHTML = "";
+    for (let i = anoAtual; i >= anoAtual - 3; i--) {
+      let opt = document.createElement("option"); opt.value = i; opt.innerText = i;
+      selectAno.appendChild(opt);
+    }
+  }
+}
+
+if (window.addEventListener) {
+  window.addEventListener('load', inicializarAnosMapaRmb, false);
+}
+
+
+/**
+ * Executa o processamento do Mapa RMB trazendo saldos iniciais automáticos
+ * e renderizando totais dinâmicos no rodapé da tabela.
+ */
+function executarMapaRMB() {
+  const mesSelect = document.getElementById("mapaRmbMes");
+  const anoSelect = document.getElementById("mapaRmbAno");
+  
+  if (!mesSelect || !anoSelect) return;
+  
+  const filtros = {
+    mes: mesSelect.value,
+    ano: anoSelect.value
+  };
+
+  const btn = document.getElementById("btnGerarMapaRmb");
+  if (btn) { btn.disabled = true; btn.innerText = "⏳ Processando..."; }
+
+  google.script.run
+    .withSuccessHandler(function(resposta) {
+      if (btn) { btn.disabled = false; btn.innerText = "📊 Gerar Mapa RMB"; }
+      
+      // Ativa o botão de impressão após carregar os dados na tabela
+      const btnImp = document.getElementById("btnImprimirMapaRmb");
+      if (btnImp) btnImp.disabled = false;
+
+      const corpo = document.getElementById("corpoMapaRmb");
+      if (!corpo) {
+        alert("Erro Crítico de Layout: Não foi encontrado um elemento HTML com o id='corpoMapaRmb'. Verifique o arquivo de visualização.");
+        return;
+      }
+      
+      if (!resposta.sucesso) {
+        alert(resposta.message);
+        return;
+      }
+
+      if (!resposta.dados || resposta.dados.length === 0) {
+        alert("Atenção: O servidor processou, mas nenhuma conta contábil foi retornada.");
+        return;
+      }
+
+      // 🌟 SOLUÇÃO DO MISTÉRIO: Remove a classe 'hidden' do container para tornar a tabela VISÍVEL
+      const containerTabela = document.getElementById("containerMapaRmb");
+      if (containerTabela) {
+        containerTabela.classList.remove("hidden");
+      }
+
+      // Montaremos todo o HTML em uma variável de texto para injetar de uma só vez
+      let htmlGerado = "";
+
+      // Variáveis acumuladoras para o Rodapé Totalizador
+      let tInicial = 0, tEmpenho = 0, tEdital = 0, tOutrosEnt = 0;
+      let tTotalEnt = 0, tTransf = 0, tOutrosSai = 0, tTotalSai = 0, tAtual = 0;
+
+      resposta.dados.forEach(item => {
+        tInicial += item.saldoInicial || 0;
+        tEmpenho += item.entEmpenho || 0;
+        tEdital += item.entEdital || 0;
+        tOutrosEnt += item.entOutros || 0;
+        tTotalEnt += item.totalEntradas || 0;
+        tTransf += item.saiTransferencia || 0;
+        tOutrosSai += item.saiOutros || 0;
+        tTotalSai += item.totalSaidas || 0;
+        tAtual += item.saldoAtual || 0;
+
+        htmlGerado += `
+          <tr data-conta="${item.conta}" data-entradas="${item.totalEntradas}" data-saidas="${item.totalSaidas}">
+            <td class="col-conta text-center font-weight-bold">${item.conta}</td>
+            <td>
+              <input type="number" step="0.01" class="form-control form-control-sm input-saldo-inicial text-right" 
+                value="${(item.saldoInicial || 0).toFixed(2)}" oninput="recalcularLinhaMapa(this)">
+            </td>
+            <td class="col-empenho text-right text-success">${(item.entEmpenho || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-edital text-right text-success">${(item.entEdital || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-outras-ent text-right text-success">${(item.entOutros || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-total-ent text-right font-weight-bold table-success">${(item.totalEntradas || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-transf text-right text-danger">${(item.saiTransferencia || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-outras-sai text-right text-danger">${(item.saiOutros || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-total-sai text-right font-weight-bold table-danger">${(item.totalSaidas || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+            <td class="col-atual celula-saldo-atual text-right font-weight-bold table-warning">${(item.saldoAtual || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          </tr>
+        `;
+      });
+
+      // Adiciona a linha de totais estruturada ao final da variável de texto
+      htmlGerado += `
+        <tr id="linhaTotalizadorMapa" style="background-color: #212529; color: #ffffff; font-weight: bold;">
+          <td class="text-center bg-dark text-white">TOTAL GERAL</td>
+          <td class="text-right bg-dark text-white" id="totInicial">${tInicial.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-light">${tEmpenho.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-light">${tEdital.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-light">${tOutrosEnt.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-warning font-weight-bold">${tTotalEnt.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-light">${tTransf.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-light">${tOutrosSai.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-warning font-weight-bold">${tTotalSai.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+          <td class="text-right text-warning font-weight-bold" id="totAtual">${tAtual.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</td>
+        </tr>
+      `;
+
+      // Aplica tudo na tela de uma única vez de forma mandatória
+      corpo.innerHTML = htmlGerado;
+
+      // Armazena em escopo global o período ativo para uso no salvamento
+      window.periodoMapaAtivo = `${filtros.mes}/${filtros.ano}`;
+    })
+    .withFailureHandler(function(err) {
+      if (btn) { btn.disabled = false; btn.innerText = "📊 Gerar Mapa RMB"; }
+      alert("Falha crítica no servidor: " + err.message);
+    })
+    .gerarDadosMapaRMB(filtros);
+}
+
+/**
+ * 🔄 Recalcula dinamicamente a linha alterada pelo usuário E atualiza o rodapé totalizador
+ */
+function recalcularLinhaMapa(inputElement) {
+  const tr = inputElement.closest("tr");
+  const saldoInicial = parseFloat(inputElement.value) || 0;
+  const totalEntradas = parseFloat(tr.getAttribute("data-entradas")) || 0;
+  const totalSaidas = parseFloat(tr.getAttribute("data-saidas")) || 0;
+  
+  const novoSaldoAtual = saldoInicial + totalEntradas - totalSaidas;
+  
+  const celulaSaldoAtual = tr.querySelector(".celula-saldo-atual");
+  if (celulaSaldoAtual) {
+    celulaSaldoAtual.innerText = novoSaldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  // --- RECALCULAR TOTAIS GERAIS DO RODAPÉ ---
+  let somaIniciais = 0;
+  let sAtuais = 0;
+
+  // Percorre todas as linhas de dados (ignorando a última que é o totalizador)
+  document.querySelectorAll("#corpoMapaRmb tr").forEach(linha => {
+    if (linha.id === "linhaTotalizadorMapa") return;
+    
+    const inp = linha.querySelector(".input-saldo-inicial");
+    const vInicial = inp ? parseFloat(inp.value) || 0 : 0;
+    somaIniciais += vInicial;
+
+    // Extrai o valor limpo da célula de saldo atual
+    const textoAtual = linha.querySelector(".celula-saldo-atual").innerText;
+    const vAtual = parseFloat(textoAtual.replace(/[R$\s.]/g, "").replace(",", ".")) || 0;
+    sAtuais += vAtual;
+  });
+
+  // Atualiza os valores visuais no rodapé estrutural
+  document.getElementById("totInicial").innerText = somaIniciais.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+  document.getElementById("totAtual").innerText = sAtuais.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+/**
+ * 💾 ENVIA OS DADOS DA TELA PARA SALVAR NA ABA 'MAPA_RMB'
+ */
+function salvarMapaPlanilha() {
+  const linhas = document.querySelectorAll("#corpoMapaRmb tr");
+  if (linhas.length === 0) return alert("Não há dados em tela para salvar. Gere o relatório primeiro.");
+  
+  const pacoteDados = [];
+
+  linhas.forEach(tr => {
+    if (tr.id === "linhaTotalizadorMapa") return; // Ignora o rodapé
+
+    const conta = tr.querySelector(".col-conta").innerText;
+    const textoAtual = tr.querySelector(".celula-saldo-atual").innerText;
+    
+    // Tratamento de conversão da string formatada R$ para float puro de banco de dados
+    const saldoAtualFloat = parseFloat(textoAtual.replace(/[R$\s.]/g, "").replace(",", ".")) || 0;
+
+    pacoteDados.push({
+      conta: conta,
+      saldoAtual: saldoAtualFloat
+    });
+  });
+
+  const periodo = window.periodoMapaAtivo || "01/2026";
+
+  if (!confirm(`Deseja salvar/sobrescrever o fechamento consolidado do período [${periodo}] na aba MAPA_RMB?`)) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      alert(res.message);
+    })
+    .withFailureHandler(function(err) {
+      alert("Erro ao salvar: " + err.message);
+    })
+    .salvarDadosMapaRMB(periodo, pacoteDados);
+}
+
+/**
+ * 🌟 NOVA FUNÇÃO: GERA O RELATÓRIO INSTITUCIONAL FORMATADO PARA IMPRESSÃO
+ */
+/**
+ * GERA O RELATÓRIO INSTITUCIONAL FORMATADO PARA IMPRESSÃO COM LINK DIRETO DO GOOGLE DRIVE (ID CONFIGURADO)
+ */
+function imprimirRelatorioInstitucionalMapa() {
+  const mesSelect = document.getElementById("mapaRmbMes");
+  const anoSelect = document.getElementById("mapaRmbAno");
+  const mesText = mesSelect.options[mesSelect.selectedIndex].text;
+  const anoText = anoSelect.value;
+
+  const linhasTr = document.querySelectorAll("#corpoMapaRmb tr");
+  if (linhasTr.length === 0) return;
+
+  // 🌟 URL de renderização direta com o ID do seu arquivo do Google Drive
+  const urlLogoDrive = "https://lh3.googleusercontent.com/d/1r3GLe3Q36gFfTiCeiTqo-Vc7CQkBZTyD";
+
+  const win = window.open("", "_blank");
+  win.document.write(`
+    <html>
+    <head>
+      <title>Mapa Integrado do RMB - ${mesText}/${anoText}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 30px; font-size: 11px; color: #333; }
+        
+        /* Layout estruturado do cabeçalho institucional */
+        .container-header { display: table; width: 100%; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 25px; }
+        .logo-ufpe { display: table-cell; vertical-align: middle; width: 85px; text-align: left; }
+        
+        .logo-ufpe img { 
+          display: block;
+          width: 75px; 
+          height: auto; 
+          max-width: 75px;
+        }
+        
+        .texto-header { display: table-cell; vertical-align: middle; text-align: center; padding-right: 85px; }
+        .texto-header h1 { margin: 2px 0; font-size: 14px; font-weight: bold; color: #111; }
+        .texto-header h2 { margin: 2px 0; font-size: 12px; font-weight: bold; color: #333; }
+        .texto-header h3 { margin: 2px 0; font-size: 11px; font-weight: normal; color: #444; }
+        .texto-header h4 { margin: 10px 0 2px 0; font-size: 13px; font-weight: bold; text-decoration: underline; color: #000; }
+        .texto-header h5 { margin: 2px 0; font-size: 12px; font-weight: bold; color: #222; }
+        
+        .meta-info { text-align: right; font-style: italic; margin-bottom: 15px; font-size: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        th, td { border: 1px solid #666; padding: 5px 6px; font-size: 10px; }
+        th { background-color: #212529; color: white; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 9px; }
+        .sub-header th { background-color: #495057; font-size: 9px; }
+        
+        @media print {
+          body { margin: 15px; font-size: 10px; }
+          .no-print { display: none; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="margin-bottom: 20px; text-align: left;">
+        <button onclick="window.print();" style="padding: 8px 16px; font-weight: bold; background-color: #212529; color: white; border: none; cursor: pointer; border-radius: 4px;">
+          🖨️ Confirmar Impressão / Salvar PDF
+        </button>
+      </div>
+
+      <div class="container-header">
+        <div class="logo-ufpe">
+          <img src="${urlLogoDrive}" alt="Logo UFPE">
+        </div>
+        <div class="texto-header">
+          <h1>UNIVERSIDADE FEDERAL DE PERNAMBUCO</h1>
+          <h2>PRÓ-REITORIA DE ADMINISTRAÇÃO - PROAD</h2>
+          <h3>DIRETORIA DE GESTÃO PATRIMONIAL E DOCUMENTAL - DGPD</h3>
+          <h3>COORDENAÇÃO DE BENS MÓVEIS E ALMOXARIFADO CENTRAL - CBMAC</h3>
+          <h4>MAPA INTEGRADO DO RMB (RELATÓRIO DE MOVIMENTAÇÃO DE BENS)</h4>
+          <h5>REFERÊNCIA: ${mesText.toUpperCase()} DE ${anoText}</h5>
+        </div>
+      </div>
+
+      <div class="meta-info">
+        Relatório emitido em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th rowspan="2" style="vertical-align: middle; width: 9%;">Conta Contábil</th>
+            <th rowspan="2" style="vertical-align: middle; width: 10%;">Saldo Inicial</th>
+            <th colspan="4" style="background-color: #1e4620;">Entradas do Período</th>
+            <th colspan="3" style="background-color: #611f24;">Saídas do Período</th>
+            <th rowspan="2" style="vertical-align: middle; width: 11%;">Saldo Atual</th>
+          </tr>
+          <tr class="sub-header">
+            <th style="width: 9%;">Empenho</th>
+            <th style="width: 9%;">Edital Int.</th>
+            <th style="width: 9%;">Outras Ent.</th>
+            <th style="width: 10%; background-color: #2e6930;">Total Entradas</th>
+            <th style="width: 9%;">Transf.</th>
+            <th style="width: 9%;">Outras Saí.</th>
+            <th style="width: 10%; background-color: #822b31;">Total Saídas</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(() => {
+            let tabelaHtml = "";
+            
+            // Varre as linhas pulando o totalizador estrutural de tela para evitar o erro de nulo
+            document.querySelectorAll("#corpoMapaRmb tr").forEach(tr => {
+              if (tr.id === "linhaTotalizadorMapa") return; // 🌟 PULA A LINHA DE TOTAIS DA TELA
+
+              const conta = tr.querySelector(".col-conta").innerText;
+              const inputInicial = tr.querySelector(".input-saldo-inicial");
+              const valInicial = parseFloat(inputInicial.value) || 0;
+              const inicialFormatado = valInicial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              
+              const empenho = tr.querySelector(".col-empenho").innerText;
+              const edital = tr.querySelector(".col-edital").innerText;
+              const outrasEnt = tr.querySelector(".col-outras-ent").innerText;
+              const totalEnt = tr.querySelector(".col-total-ent").innerText;
+              const transf = tr.querySelector(".col-transf").innerText;
+              const outrasSai = tr.querySelector(".col-outras-sai").innerText;
+              const totalSai = tr.querySelector(".col-total-sai").innerText;
+              const atual = tr.querySelector(".col-atual").innerText;
+              
+              tabelaHtml += `<tr>
+                <td style="text-align:center;font-weight:bold;">${conta}</td>
+                <td style="text-align:right;">${inicialFormatado}</td>
+                <td style="text-align:right;color:#155724;">${empenho}</td>
+                <td style="text-align:right;color:#155724;">${edital}</td>
+                <td style="text-align:right;color:#155724;">${outrasEnt}</td>
+                <td style="text-align:right;font-weight:bold;background-color:#e2f0d9;">${totalEnt}</td>
+                <td style="text-align:right;color:#721c24;">${transf}</td>
+                <td style="text-align:right;color:#721c24;">${outrasSai}</td>
+                <td style="text-align:right;font-weight:bold;background-color:#fce4d6;">${totalSai}</td>
+                <td style="text-align:right;font-weight:bold;background-color:#fff2cc;">${atual}</td>
+              </tr>`;
+            });
+
+            // 🌟 INJETA MANUALMENTE A LINHA DE TOTALIZADORES CAPTURANDO DO RODAPÉ DA TELA
+            const rTela = document.getElementById("linhaTotalizadorMapa");
+            if (rTela) {
+              const tds = rTela.querySelectorAll("td");
+              if (tds.length >= 10) {
+                tabelaHtml += `<tr style="background-color: #212529; color: #ffffff; font-weight: bold;">
+                  <td style="text-align:center; background-color: #212529; color: white;">TOTAL GERAL</td>
+                  <td style="text-align:right; background-color: #212529; color: white;">${tds[1].innerText}</td>
+                  <td style="text-align:right; color: #ffffff; background-color: #343a40;">${tds[2].innerText}</td>
+                  <td style="text-align:right; color: #ffffff; background-color: #343a40;">${tds[3].innerText}</td>
+                  <td style="text-align:right; color: #ffffff; background-color: #343a40;">${tds[4].innerText}</td>
+                  <td style="text-align:right; color: #000000; background-color: #d4edda;">${tds[5].innerText}</td>
+                  <td style="text-align:right; color: #ffffff; background-color: #343a40;">${tds[6].innerText}</td>
+                  <td style="text-align:right; color: #ffffff; background-color: #343a40;">${tds[7].innerText}</td>
+                  <td style="text-align:right; color: #000000; background-color: #f8d7da;">${tds[8].innerText}</td>
+                  <td style="text-align:right; color: #000000; background-color: #fff3cd;">${tds[9].innerText}</td>
+                </tr>`;
+              }
+            }
+
+            return tabelaHtml;
+          })()}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
+</script>

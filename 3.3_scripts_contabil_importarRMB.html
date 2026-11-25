@@ -1,0 +1,53 @@
+<script>
+function processarArquivoRmb() {
+  const inputArquivo = document.getElementById("rmbArquivo");
+  const referencia = document.getElementById("rmbReferencia").value;
+  const ug = document.getElementById("rmbUg").value;
+
+  if (!inputArquivo.files || inputArquivo.files.length === 0) {
+    alert("Por favor, selecione o arquivo .txt do RMB para importar.");
+    return;
+  }
+
+  const arquivo = inputArquivo.files[0];
+  const reader = new FileReader();
+
+  // Aciona o carregador visual global
+  if (typeof mostrarLoader === "function") mostrarLoader();
+
+  reader.onload = function(e) {
+    const textoArquivo = e.target.result;
+
+    const payload = {
+      referencia: referencia,
+      ug: ug,
+      txtContent: textoArquivo
+    };
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        if (resp === "OK") {
+          if (typeof abrirModal === "function") {
+            abrirModal("Sucesso", "O arquivo RMB do SIADS foi processado e importado com sucesso!");
+          } else {
+            alert("O arquivo RMB do SIADS foi processado e importado com sucesso!");
+          }
+          document.getElementById("formImportarRmb").reset();
+        }
+      })
+      .withFailureHandler(function(err) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        if (typeof abrirModal === "function") {
+          abrirModal("Erro no Processamento", err.message);
+        } else {
+          alert("Erro no processamento: " + err.message);
+        }
+      })
+      .processarERegistrarRmb(payload);
+  };
+
+  // Dispara a leitura nativa do arquivo texto
+  reader.readAsText(arquivo, "UTF-8");
+}
+</script>

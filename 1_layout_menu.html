@@ -1,0 +1,74 @@
+<div class="menu">
+  <button onclick="mostrarAba('home')">Início</button>
+
+  <div class="menu-dropdown">
+    <button class="dropbtn">Registro ▾</button>
+    <div class="dropdown-content">
+      <a onclick="mostrarAba('cadastro')">Cadastro</a>
+      <a onclick="mostrarAba('txt')">Gerar TXT</a>
+      <a onclick="mostrarAba('tombamento')">Inserir nª de Tombamentos</a>
+      <a onclick="mostrarAba('informarNL')">Informar NL de Registro</a>
+      <a onclick="mostrarAba('relatorioEntrada')">Comprovante de Entrada e Tombamento</a>
+      <a onclick="mostrarAba('GestaoCadmat')" style="cursor: pointer;">Gestão de CADMAT</a>
+    </div>
+  </div>
+
+  <div class="menu-dropdown">
+    <button class="dropbtn">Movimento ▾</button>
+    <div class="dropdown-content">
+      <a onclick="mostrarAba('movimentacao')">Transferências</a>
+      <a onclick="mostrarAba('recolhimento')">Recolhimento</a>
+      <a onclick="preencherAnosMovNL(); mostrarAba('informarNLMovimento')">Informar NL de Movimento</a>
+    </div>
+  </div>
+
+  <div class="menu-dropdown">
+    <button class="dropbtn">Saídas ▾</button>
+    <div class="dropdown-content">
+      <a onclick="mostrarAba('saidas')">Informar Saída</a>
+    </div>
+  </div>
+
+  <div class="menu-dropdown">
+  <button class="dropbtn">🚚 Carga e Descarga ▾</button>
+  <div class="dropdown-content">
+    <a onclick="mostrarAba('cargaDescarga'); carregarPainelAgendamentos();">Agendamentos</a>
+    <a onclick="mostrarAba('calendarioLogistico'); inicializarCalendario();">Calendário de Serviços</a>
+  </div>
+</div>
+
+  <div class="menu-dropdown">
+  <button class="dropbtn">Contábil ▾</button>
+  <div class="dropdown-content">
+    <a onclick="mostrarAba('contabil'); inicializarAnosDosRelatorios();">Relatório de Entradas para o RMB</a>    
+    <a onclick="mostrarAba('relatorioMovRmb'); inicializarAnosDosRelatorios();">Relatório de Movimentações para o RMB</a>
+    <a onclick="mostrarAba('mapaRmb'); inicializarAnosMapaRmb();">Mapa do RMB</a>
+    <a onclick="mostrarAba('importarRmbSiads')">Importar RMB do SIADS</a>
+    <a onclick="mostrarAba('importarTransfInterna')">Importar Razão Movimentação</a>
+  </div>
+</div>
+
+  <div class="menu-dropdown">
+    <button class="dropbtn">Consultas ▾</button>
+    <div class="dropdown-content">
+      <a onclick="mostrarAba('conversao')">Conversão de Tombos</a>
+      <a onclick="mostrarAba('cadmat')">Consulta CADMAT</a>
+    </div>
+  </div>
+
+  <div class="menu-dropdown">
+    <button class="dropbtn">Relatórios Gerenciais ▾</button>
+    <div class="dropdown-content">
+      <a onclick="mostrarAba('relatorio')">Relatório RMB</a>
+    </div>
+  </div>
+
+  <div class="menu-dropdown">
+  <button class="dropbtn">⚙️ Configurações ▾</button>
+  <div class="dropdown-content">
+    <a onclick="mostrarAba('usuarios')" style="cursor: pointer;">Gerenciar Usuários</a>
+    <a onclick="mostrarAba('GestaoCadmat')" style="cursor: pointer;">Gestão de CADMAT</a>
+  </div>
+</div>
+
+</div>

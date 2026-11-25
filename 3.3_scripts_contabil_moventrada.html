@@ -1,0 +1,204 @@
+<script>
+// =========================================================================
+// 🚀 GERENCIA GERAÇÃO DO RELATÓRIO DE MOVIMENTAÇÕES (FRONT-END)
+// =========================================================================
+
+window.dispararGeracaoMovimentacoes = function() {
+  console.log("=== Botão de gerar relatório clicado ===");
+  
+  var mesSel = document.getElementById("relMovRmbMes");
+  var anoSel = document.getElementById("relMovRmbAno");
+  var btn = document.getElementById("btnGerarRelMovRmb") || document.getElementById("btnGerarMovRmb");
+  
+  // Elementos do seu HTML estrutural
+  var containerPrincipal = document.getElementById("containerResultadosMovRmb");
+  var corpoAnalitico = document.getElementById("corpoRelatorioMovAnalitico");
+  var corpoResumo = document.getElementById("corpoRelatorioMovResumo");
+  
+  if (!mesSel || !anoSel) {
+    alert("Erro: Filtros de Mês ou Ano não encontrados.");
+    return;
+  }
+  
+  if (!containerPrincipal || !corpoAnalitico || !corpoResumo) {
+    alert("Erro estrutural: Elementos internos da tabela ou contêiner de resultados não encontrados no HTML.");
+    return;
+  }
+
+  var filtros = {
+    mes: mesSel.value,
+    ano: anoSel.value
+  };
+  
+  var mesText = mesSel.options[mesSel.selectedIndex] ? mesSel.options[mesSel.selectedIndex].text : filtros.mes;
+  var anoText = anoSel.value;
+  
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+  }
+  
+  // Limpa os corpos e garante que o contêiner fique visível para mostrar o feedback de carregamento
+  corpoAnalitico.innerHTML = '<tr><td colspan="10" class="text-center p-3"><div class="spinner-border text-primary spinner-border-sm"></div> Buscando dados analíticos...</td></tr>';
+  corpoResumo.innerHTML = '<tr><td colspan="4" class="text-center p-3"><div class="spinner-border text-primary spinner-border-sm"></div> Buscando resumo consolidado...</td></tr>';
+  
+  // Remove a classe que esconde o bloco para que o usuário veja o processamento
+  containerPrincipal.classList.remove("hidden");
+  containerPrincipal.classList.remove("d-none");
+  containerPrincipal.style.display = "block";
+  
+  // 🎯 Executa a função do servidor .gs
+  google.script.run
+    .withSuccessHandler(function(resposta) {
+      console.log("Resposta recebida do servidor:", resposta);
+      
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle-fill"></i> Gerar Relatório';
+      }
+      
+      if (!resposta || resposta.sucesso === false) {
+        var msgErro = resposta.message || 'Erro desconhecido no servidor.';
+        corpoAnalitico.innerHTML = `<tr><td colspan="10" class="alert alert-danger text-center">${msgErro}</td></tr>`;
+        corpoResumo.innerHTML = `<tr><td colspan="4" class="alert alert-danger text-center">${msgErro}</td></tr>`;
+        return;
+      }
+      
+      var dadosAnaliticos = resposta.analitico || [];
+      var dadosResumo = resposta.resumo || [];
+      
+      if (dadosAnaliticos.length === 0 && dadosResumo.length === 0) {
+        corpoAnalitico.innerHTML = '<tr><td colspan="10" class="text-center table-warning">Nenhuma movimentação encontrada para este período.</td></tr>';
+        corpoResumo.innerHTML = '<tr><td colspan="4" class="text-center table-warning">Nenhum resumo disponível.</td></tr>';
+        return;
+      }
+      
+      // Salva no cache global para exportações futuras (PDF/Excel)
+      window.dadosUltimoRelatorioRMB_Mov = dadosAnaliticos;
+      window.dadosUltimoResumoRMB_Mov = dadosResumo;
+      window.periodoUltimoRelatorioRMB_Mov = mesText + " de " + anoText;
+      
+      // 📊 1. PREENCHE A TABELA DETALHAMENTO ANALÍTICO (Buscando Seq. da Coluna A)
+      var htmlAnalitico = "";
+      dadosAnaliticos.forEach(function(item) {
+        htmlAnalitico += `
+          <tr>
+            <td class="text-center text-muted fw-bold">${item.sequencial || '-'}</td>
+            <td><strong>${item.processo || item.termo || '-'}</strong></td>
+            <td class="text-center">${item.ugOrigem || '-'}</td>
+            <td class="text-center font-monospace">${item.nlSaida || '-'}</td>
+            <td class="text-center">${item.contaSaida || '-'}</td>
+            <td class="text-end font-monospace text-danger fw-bold">${Number(item.valorSaida || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td class="text-center">${item.ugDestino || '-'}</td>
+            <td class="text-center font-monospace">${item.nlEntrada || '-'}</td>
+            <td class="text-center">${item.contaEntrada || '-'}</td>
+            <td class="text-end font-monospace text-success fw-bold">${Number(item.valorEntrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+          </tr>
+        `;
+      });
+      corpoAnalitico.innerHTML = htmlAnalitico;
+      
+      // 📊 2. PREENCHE A TABELA RESUMO CONSOLIDADO
+      var htmlResumo = "";
+      dadosResumo.forEach(function(item) {
+        htmlResumo += `
+          <tr>
+            <td class="text-center fw-bold">${item.ug || '-'}</td>
+            <td class="text-center">${item.conta || '-'}</td>
+            <td class="text-end font-monospace text-success">${Number(item.totalEntrada || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td class="text-end font-monospace text-danger">${Number(item.totalSaida || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+          </tr>
+        `;
+      });
+      corpoResumo.innerHTML = htmlResumo;
+      
+      console.log("Interface atualizada com o Sequencial real da planilha.");
+    })
+    .withFailureHandler(function(err) {
+      console.error("Erro na chamada:", err);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle-fill"></i> Gerar Relatório';
+      }
+      corpoAnalitico.innerHTML = `<tr><td colspan="10" class="text-center text-danger">Erro crítico de rede: ${err.message}</td></tr>`;
+    })
+    .gerarRelatorioMovimentacoesRMB(filtros);
+};
+
+window.gerarRelatorioMovimentacoes = function() { window.dispararGeracaoMovimentacoes(); };
+
+// =========================================================================
+// 🔄 INICIALIZAÇÃO DOS FILTROS DO ANO
+// =========================================================================
+function inicializarAnosDosRelatorios() {
+  var anoAtual = new Date().getFullYear();
+  var selectAnoMov = document.getElementById("relMovRmbAno");
+  if (selectAnoMov) {
+    selectAnoMov.innerHTML = "";
+    for (var i = anoAtual; i >= anoAtual - 3; i--) {
+      var opt = document.createElement("option"); opt.value = i; opt.innerText = i;
+      selectAnoMov.appendChild(opt);
+    }
+  }
+}
+
+if (window.addEventListener) {
+  window.addEventListener('load', inicializarAnosDosRelatorios, false);
+}
+
+// =========================================================================
+// 🚀 EXPORTAÇÃO PARA PDF
+// =========================================================================
+window.exportarMovimentacoesPDF = function() {
+  if (!window.dadosUltimoRelatorioRMB_Mov) {
+    alert("Por favor, gere o relatório antes de exportar.");
+    return;
+  }
+  
+  var periodo = window.periodoUltimoRelatorioRMB_Mov;
+  
+  try {
+    const { jsPDF } = window.jspdf;
+    var doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    var meioPagina = doc.internal.pageSize.getWidth() / 2;
+    
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(60, 60, 60);
+    doc.text("UNIVERSIDADE FEDERAL DE PERNAMBUCO", meioPagina, 45, { align: 'center' });
+    doc.text("PRÓ-REITORIA DE GESTÃO ADMINISTRATIVA", meioPagina, 62, { align: 'center' });
+    doc.text("COORDENAÇÃO DE BENS MÓVEIS E ALMOXARIFADO CENTRAL - CBMAC", meioPagina, 79, { align: 'center' });
+    
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(1);
+    doc.line(40, 90, 800, 90);
+    
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(0, 0, 0);
+    doc.text("RELATÓRIO DE MOVIMENTAÇÕES (TRANSFERÊNCIAS ENTRE UGs)", meioPagina, 115, { align: 'center' });
+    
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    doc.text("Período: " + periodo + " | Emitido em: " + new Date().toLocaleDateString('pt-BR'), meioPagina, 130, { align: 'center' });
+    
+    var t1 = document.getElementById("tabelaMovAnalitico");
+    doc.autoTable({
+      html: t1,
+      startY: 145,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [33, 37, 41] }
+    });
+    
+    var proximaLinhaY = doc.lastAutoTable.finalY + 30;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+    doc.text("RESUMO CONSOLIDADO POR UG E CONTA", 40, proximaLinhaY);
+    
+    var t2 = document.getElementById("tabelaMovResumo");
+    doc.autoTable({
+      html: t2,
+      startY: proximaLinhaY + 10,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [52, 58, 64] }
+    });
+    
+    doc.save(`Relatorio_Movimentacoes_${periodo.replace(/\s+/g, '_')}.pdf`);
+  } catch (e) {
+    alert("Erro ao exportar PDF: " + e.message);
+  }
+};
+</script>

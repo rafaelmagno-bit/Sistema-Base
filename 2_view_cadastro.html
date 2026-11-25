@@ -1,0 +1,217 @@
+<div id="abaCadastro" class="hidden">
+  <div class="cadastro-header">
+    <h2>Novo Cadastro de Entrada</h2>
+    <button onclick="limparFormulario()" class="btn-limpar">🧹 Limpar Tudo</button>
+  </div>
+
+  <div class="card">
+    <div class="section-title">1. Dados do Processo</div>
+    
+    <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom: 15px;">
+      <div><label>Tipo de Entrada</label><select id="tipo" onchange="ajustarCamposCondicionais()"></select></div>
+      <div><label>Nº Processo</label><input id="processo" placeholder="23076.000000/2026-00" maxlength="25" onblur="finalizarMascaraProcesso(this)" oninput="mascaraProcessoDinamica(this)"></div>
+      <div><label>Data do Processo/Doc</label><input id="data" type="date"></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr;">
+      <div style="position: relative;">
+        <label for="buscaUg">UG Registro</label>
+        <input type="text" id="buscaUg" placeholder="Digite o código, descrição ou sigla..." 
+               oninput="buscarUgDinamico(this.value)" autocomplete="off"
+               style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        <div id="resultadoBuscaUg" 
+             style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+        </div>
+        <input type="hidden" id="ug" name="ug">
+      </div>
+
+      <div style="position: relative;">
+        <label for="buscaUorg">UORG Solicitante</label>
+        <input type="text" id="buscaUorg" placeholder="Selecione uma UG de registro primeiro..." disabled
+               oninput="buscarUorgDinamico(this.value)" autocomplete="off"
+               style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+        <div id="resultadoBuscaUorg" 
+             style="position: absolute; z-index: 1050; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+        </div>
+        <input type="hidden" id="uorg" name="uorg">
+      </div>
+    </div>
+
+  </div>
+
+  <div id="secaoEspecifica" class="card hidden">
+    <div class="section-title">2. Detalhes Específicos</div>
+    <div id="blocoEmpenho" class="hidden">
+      <div class="grid">
+        <div><label>Nº Empenho</label><input id="empenho"></div>
+        
+        <div style="position: relative;">
+          <label for="buscaUgEmpenho">UG Empenho</label>
+          <input type="text" id="buscaUgEmpenho" placeholder="Digite o código, descrição ou sigla..." 
+                 oninput="buscarUgEmpenhoDinamico(this.value)" autocomplete="off"
+                 style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
+          <div id="resultadoBuscaUgEmpenho" 
+               style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+          </div>
+          <input type="hidden" id="ugEmpenho" name="ugEmpenho">
+        </div>
+      </div>
+    </div>
+    <div id="blocoEdital" class="hidden">
+      <div class="grid">
+        <div><label>Título do Edital/Convênio</label><input id="edital"></div>
+        <div><label>Nome do Beneficiário</label><input id="beneficiario"></div>
+        <div><label>CPF Beneficiário</label><input id="cpf"></div>
+        <div><label>SIAPE Beneficiário</label><input id="siape"></div>
+      </div>
+    </div>
+    <div id="blocoFade" class="hidden">
+      <div class="grid"><div><label>Termo de Transferência de Propriedade - FADE</label><input id="fade"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">3. Dados do Corresponsável</div>
+    <div class="grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; align-items: flex-end; gap: 10px;">
+      <div style="position:relative;">
+        <label>Nome do Servidor</label>
+        <input id="nomeServidor" onkeyup="filtrarServidores()" placeholder="Digite o nome..." autocomplete="off">
+        <div id="dropdownServidores" class="dropdown"></div>
+      </div>
+      <div><label>CPF</label><input id="cpfServidor" readonly style="background:#f8f9fa;"></div>
+      <div><label>SIAPE</label><input id="siapeServidor" readonly style="background:#f8f9fa;"></div>
+      <div><label>E-mail</label><input id="emailServidor" placeholder="email@ufpe.br"></div>
+      <div><label>Telefone</label><input id="telefoneServidor" placeholder="(81) 0000-0000"></div>
+      
+      <div>
+        <button type="button" onclick="salvarContatosServidorTela()" title="Salvar contatos na aba SERVIDORES"
+                style="background: #1F4E78; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; height: 36px; display: flex; align-items: center; justify-content: center;">
+          💾 Atualizar Base
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="containerNotasFiscais"></div>
+
+  <div style="margin: 20px 0; text-align: center;">
+    <button onclick="adicionarNotaFiscal()" class="btn-adicionar" style="background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+      + Adicionar Nova Nota Fiscal ao Processo
+    </button>
+  </div>
+
+  <div class="resumo-fixed">
+    <div><b>Quantidade:</b> <span id="quantidadeTotal">0</span></div>
+    <div><b>Total:</b> <span id="valorTotal" style="color: #28a745; font-weight: bold;">R$ 0,00</span></div>
+    <button id="btnSalvar" onclick="salvar()" style="background:#28a745; color:white; padding:10px 40px; border-radius:30px; border:none; font-weight:bold; cursor:pointer;">🚀 FINALIZAR CADASTRO</button>
+  </div>
+</div> 
+
+<div id="abaTombamento" class="hidden">
+  <div class="home-container">
+    <div class="home-header">
+      <h1>Vincular Tombamentos</h1>
+      <p>Informe o Sequencial do processo para atribuir patrimônios.</p>
+    </div>
+
+    <div class="card" style="display: flex; gap: 15px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label>Sequencial do Registro</label>
+        <input type="text" id="buscaSeqTombamento" placeholder="Ex: 2026000001" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="font-size: 1.1rem; padding: 10px; width: 100%;" >
+      </div>
+      <button onclick="buscarItensParaTombamento()" class="btn-primary" style="height: 45px; background: #1F4E78; color: white; border: none; padding: 0 20px; border-radius: 5px; cursor: pointer;">🔍 Listar Itens</button>
+    </div>
+
+    <div id="containerItensTombamento" style="margin-top: 20px;"></div>
+
+    <div id="footerTombamento" class="hidden" style="margin-top: 20px; text-align: right;">
+      <button onclick="enviarTombamentos()" class="btn-primary" style="background: #28a745; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer;">💾 Salvar Tombamentos na Planilha</button>
+    </div>
+  </div>
+</div>
+
+<div id="abaRelatorioEntrada" class="hidden">
+  <div class="home-container">
+    <div class="home-header">
+      <h1>Relatório de Entrada de Bens</h1>
+      <p>Reemita o comprovante completo contendo os dados do processo e os números de tombamento (SIADS).</p>
+    </div>
+
+    <div class="card" style="display: flex; gap: 15px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label>Sequencial do Registro (10 dígitos)</label>
+        <input type="text" id="buscaSeqRelatorioEntrada" 
+               placeholder="Ex: 2026000001" 
+               maxlength="10" 
+               oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+      </div>
+      <button onclick="gerarRelatorioEntradaPDF()" class="btn-primary" style="height: 45px; background: #1F4E78; color: white; border: none; padding: 0 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+        📄 Gerar PDF de Entrada
+      </button>
+    </div>
+    
+    <div id="statusRelatorioEntrada" style="margin-top: 15px; color: #666; font-size: 0.9rem;"></div>
+  </div>
+</div>
+
+<div id="abaInformarNL" class="container-fluid mt-4 hidden">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+      <i class="bi bi-pencil-square"></i>
+      <h5 class="mb-0">Informar NL de Registro Patrimonial</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Digite o Sequencial do Registro:</label>
+          <div class="input-group">
+            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+            <input type="text" id="nlBuscaSequencial" class="form-control" placeholder="Exemplo: 2026000001" maxlength="10" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')" onkeypress="if(event.key === 'Enter') buscarDadosNL()">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <button id="btnBuscarNL" class="btn btn-primary w-100" onclick="buscarDadosNL()">
+            Buscar Registro
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="containerResultadoNL" class="hidden">
+    <div class="card shadow-sm mb-4 border-primary">
+      <div class="card-header bg-light border-primary fw-bold text-primary">
+        <i class="bi bi-info-circle-fill"></i> Dados de Notas Fiscais Localizadas para o Registro
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped table-hover mb-0 align-middle" style="font-size: 13px;">
+            <thead class="table-dark">
+              <tr>
+                <th>Tipo de Entrada</th>
+                <th>Processo</th>
+                <th>UG Destino</th>
+                <th>Nº Documento / NF</th>
+                <th class="text-end">Valor Total da NF</th>
+                <th style="width: 30%;">Número da NL de Registro</th>
+              </tr>
+            </thead>
+            <tbody id="corpoTabelaNL">
+              </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-end gap-2 p-3">
+        <button class="btn btn-secondary" onclick="limparTelaNL()">Cancelar</button>
+        <button id="btnSalvarNL" class="btn btn-success px-4" onclick="gravarDadosNL()">
+          <i class="bi bi-check-circle"></i> Salvar NL(s)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loader" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; justify-content: center; align-items: center; flex-direction: column;">
+  <div class="spinner"></div>
+  <p style="color: #1F4E78; font-weight: bold; margin-top: 15px;">Processando...</p>
+</div>

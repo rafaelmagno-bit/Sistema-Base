@@ -1,0 +1,506 @@
+<script>
+// Variáveis globais de controle para o agendamento ativo
+let processoPendenteAtual = "";
+let tipoPendenteAtual = "";
+let linhaPlanilhaAtual = "";
+
+// Variáveis de controle globais da aba do Calendário
+let linhaEdicaoAgenda = "";
+let tipoEdicaoAgenda = "";
+
+/**
+ * MÓDULO DE AGENDAMENTOS (PENDÊNCIAS)
+ */
+function carregarPainelAgendamentos() {
+  const container = document.getElementById("painelUgAgendamentos");
+  container.innerHTML = `
+    <div class="text-center p-5">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2">Mapeando e filtrando pendências por UG...</p>
+    </div>`;
+
+  google.script.run
+    .withSuccessHandler(renderizarPainelCargaDescarga)
+    .withFailureHandler(function(err) {
+      container.innerHTML = `<div class="alert alert-danger">Erro ao carregar painel: ${err.message}</div>`;
+    })
+    .obterPainelCargaDescarga();
+}
+
+function renderizarPainelCargaDescarga(dadosUg) {
+  const container = document.getElementById("painelUgAgendamentos");
+  container.innerHTML = "";
+
+  if (dadosUg.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-success text-center font-weight-bold p-4 shadow-sm">
+        🎉 Nenhuma carga ou descarga pendente de agendamento no sistema!
+      </div>`;
+    return;
+  }
+
+  dadosUg.forEach((ug) => {
+    const idCollapse = "collapseUg_" + ug.codigo;
+    const totalRec = ug.recolhimentos.length;
+    const totalTransf = ug.transferencias.length;
+
+    let cardHtml = `
+      <div class="card mb-3 shadow-sm" style="border-left: 4px solid #007bff;">
+        <div class="card-header p-0 bg-light">
+          <button class="btn ug-header-btn p-3" type="button" onclick="alternarExpansaoUg('${idCollapse}', this)">
+            <span style="font-size: 1.05rem; color: #2c3e50;">
+              🏢 <strong>UG ${ug.codigo}</strong> — ${ug.nome}
+            </span>
+            <div class="d-flex align-items-center">
+              ${totalRec > 0 ? `<span class="badge badge-rec px-3 py-2 mr-2" style="font-size:0.85rem;">📥 ${totalRec} Recolhimento(s)</span>` : ""}
+              ${totalTransf > 0 ? `<span class="badge badge-transf px-3 py-2 mr-2" style="font-size:0.85rem;">🚛 ${totalTransf} Transferência(s)</span>` : ""}
+              <span class="indicador-seta text-muted ml-2" style="font-size: 0.9rem;">Clique para detalhar ▾</span>
+            </div>
+          </button>
+        </div>
+
+        <div id="${idCollapse}" style="display: none;">
+          <div class="card-body bg-white p-4" style="border-top: 1px solid #dee2e6;">`;
+
+    // --- TABELA DE RECOLHIMENTOS ---
+    if (totalRec > 0) {
+      cardHtml += `
+        <div class="mb-4">
+          <h6 class="text-warning font-weight-bold mb-3 d-flex align-items-center">
+            <span class="mr-2">📥</span> PROCESSOS DE RECOLHIMENTO PENDENTES
+          </h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover table-bordered table-striped">
+              <thead class="thead-dark" style="font-size: 0.9rem;">
+                <tr>
+                  <th style="width: 20%;">Processo</th>
+                  <th style="width: 10%;">UG</th>
+                  <th>Departamento</th>
+                  <th style="width: 15%;">Data Processo</th>
+                  <th style="width: 12%;" class="text-center">Quant. Bens</th>
+                  <th style="width: 15%;" class="text-center">Ação</th>
+                </tr>
+              </thead>
+              <tbody style="font-size: 0.9rem;">`;
+      ug.recolhimentos.forEach(r => {
+        cardHtml += `
+          <tr>
+            <td class="font-weight-bold text-primary">${r.processo}</td>
+            <td>${r.ug}</td>
+            <td>${r.departamento}</td>
+            <td>${r.dataProcesso}</td>
+            <td class="text-center font-weight-bold text-dark bg-light">${r.quantBens}</td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-warning font-weight-bold px-2" onclick="abrirModalAgendamento('${r.processo}', 'RECOLHIMENTO', ${r.linhaReal}, '-')">
+                📅 Agendar
+              </button>
+            </td>
+          </tr>`;
+      });
+      cardHtml += `</tbody></table></div></div>`;
+    }
+
+    // --- TABELA DE TRANSFERÊNCIAS / DISTRIBUIÇÃO ---
+    if (totalTransf > 0) {
+      cardHtml += `
+        <div>
+          <h6 class="text-info font-weight-bold mb-3 d-flex align-items-center">
+            <span class="mr-2">🚛</span> PROCESSOS DE TRANSFERÊNCIA / DISTRIBUIÇÃO DE BENS
+          </h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover table-bordered table-striped">
+              <thead class="thead-dark" style="font-size: 0.9rem;">
+                <tr>
+                  <th style="width: 12%;">Sequencial</th>
+                  <th style="width: 18%;">Processo</th>
+                  <th>Tipo de Movimentação</th>
+                  <th style="width: 10%;">UG Origem/Destino</th>
+                  <th style="width: 15%;">UORG</th>
+                  <th style="width: 12%;">Data Envio DBM</th>
+                  <th style="width: 12%;" class="text-center">Ação</th>
+                </tr>
+              </thead>
+              <tbody style="font-size: 0.9rem;">`;
+      ug.transferencias.forEach(t => {
+        const tipoAgendamento = (t.tipoTransferencia && t.tipoTransferencia.toUpperCase().includes("DISTRIB")) 
+          ? "DISTRIBUICAO_BENS" 
+          : "TRANSFERENCIA";
+
+        cardHtml += `
+          <tr>
+            <td class="font-weight-bold text-dark">${t.sequencial || "-"}</td>
+            <td class="font-weight-bold text-primary">${t.processo}</td>
+            <td>${t.tipoTransferencia}</td>
+            <td>${t.ugOrigem || ug.codigo}</td>
+            <td>${t.uorgOrigem || "-"}</td>
+            <td>${t.dataEnvioDbm}</td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-info font-weight-bold px-2" onclick="abrirModalAgendamento('${t.processo}', '${tipoAgendamento}', ${t.linhaReal}, '${t.sequencial || ''}')">
+                📅 Agendar
+              </button>
+            </td>
+          </tr>`;
+      });
+      cardHtml += `</tbody></table></div></div>`;
+    }
+
+    cardHtml += `
+          </div>
+        </div>
+      </div>`;
+
+    container.innerHTML += cardHtml;
+  });
+}
+
+function alternarExpansaoUg(idElemento, botao) {
+  const elementoConteudo = document.getElementById(idElemento);
+  const indicadorSeta = botao.querySelector(".indicador-seta");
+
+  if (elementoConteudo.style.display === "none") {
+    elementoConteudo.style.display = "block";
+    if (indicadorSeta) indicadorSeta.innerHTML = "Recolher detalhes ▴";
+  } else {
+    elementoConteudo.style.display = "none";
+    if (indicadorSeta) indicadorSeta.innerHTML = "Clique para detalhar ▾";
+  }
+}
+
+function abrirModalAgendamento(processo, tipo, linhaReal, sequencial) {
+  processoPendenteAtual = processo;
+  tipoPendenteAtual = tipo;
+  linhaPlanilhaAtual = linhaReal;
+
+  document.getElementById("txtProcessoModal").innerText = processo;
+  document.getElementById("txtSequencialModal").innerText = (sequencial && sequencial !== "-") ? sequencial : "N/A";
+  document.getElementById("txtTipoModal").innerText = tipo;
+  document.getElementById("inputDataAgendamento").value = "";
+  
+  document.getElementById("modalAgendamentoLogistico").style.display = "flex";
+}
+
+function fecharModalAgendamento() {
+  document.getElementById("modalAgendamentoLogistico").style.display = "none";
+}
+
+function salvarAgendamentoLogistico() {
+  const dataEscolhida = document.getElementById("inputDataAgendamento").value;
+  if (!dataEscolhida) {
+    alert("Por favor, selecione uma data no calendário para o agendamento.");
+    return;
+  }
+
+  const btnSalvar = document.getElementById("btnConfirmarAgendamento");
+  btnSalvar.disabled = true;
+  btnSalvar.innerText = "Salvando...";
+
+  google.script.run
+    .withSuccessHandler(function(resposta) {
+      btnSalvar.disabled = false;
+      btnSalvar.innerText = "Confirmar Agendamento";
+      
+      if (resposta.sucesso) {
+        alert("✅ " + resposta.mensagem);
+        fecharModalAgendamento();
+        carregarPainelAgendamentos();
+      } else {
+        alert("❌ Erro: " + resposta.mensagem);
+      }
+    })
+    .withFailureHandler(function(err) {
+      btnSalvar.disabled = false;
+      btnSalvar.innerText = "Confirmar Agendamento";
+      alert("❌ Falha crítica de comunicação: " + err.message);
+    })
+    .gravarAgendamentoPlanilha(linhaPlanilhaAtual, tipoPendenteAtual, dataEscolhida);
+}
+
+/**
+ * MÓDULO DE CALENDÁRIO LOGÍSTICO
+ */
+function inicializarCalendario() {
+  const hoje = new Date();
+  const yyyy = hoje.getFullYear();
+  const mm = String(hoje.getMonth() + 1).padStart(2, '0');
+  const dd = String(hoje.getDate()).padStart(2, '0');
+  document.getElementById("filtroDataCalendario").value = `${yyyy}-${mm}-${dd}`;
+  
+  buscarAgendaDaData();
+}
+
+function buscarAgendaDaData() {
+  const dataString = document.getElementById("filtroDataCalendario").value;
+  if (!dataString) return;
+
+  exibirLoaderAgenda();
+
+  google.script.run
+    .withSuccessHandler(renderizarCronograma)
+    .withFailureHandler(tratarErroAgenda)
+    .obterAgendaLogistica(dataString);
+}
+
+function carregarAgendaCompleta() {
+  exibirLoaderAgenda();
+  google.script.run
+    .withSuccessHandler(renderizarCronograma)
+    .withFailureHandler(tratarErroAgenda)
+    .obterAgendaLogistica("");
+}
+
+function exibirLoaderAgenda() {
+  document.getElementById("containerCronogramaLogistico").innerHTML = `
+    <div class="text-center p-5">
+      <div class="spinner-border text-info" role="status"></div>
+      <p class="mt-2 text-muted">Buscando cronograma e integrando UGs...</p>
+    </div>`;
+}
+
+function tratarErroAgenda(err) {
+  document.getElementById("containerCronogramaLogistico").innerHTML = `
+    <div class="alert alert-danger font-weight-bold">Erro ao processar agenda: ${err.message}</div>`;
+}
+
+function renderizarCronograma(listaAgenda) {
+  const container = document.getElementById("containerCronogramaLogistico");
+  container.innerHTML = "";
+
+  const dataFiltroString = document.getElementById("filtroDataCalendario").value;
+
+  if (!listaAgenda || listaAgenda.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info text-center p-4 shadow-sm">
+        📭 Nenhum serviço logístico de Carga ou Descarga agendado para o período selecionado.
+      </div>`;
+    return;
+  }
+
+  if (dataFiltroString) {
+    container.innerHTML += `
+      <div class="text-right mb-3">
+        <button class="btn btn-danger font-weight-bold shadow-sm" onclick="imprimirPdfProgramacao('${dataFiltroString}')">
+          🖨️ Gerar Relatório PDF do Dia
+        </button>
+      </div>`;
+  }
+
+  let agendaPorData = {};
+  listaAgenda.forEach(item => {
+    if (item && item.data) {
+      if (!agendaPorData[item.data]) agendaPorData[item.data] = [];
+      agendaPorData[item.data].push(item);
+    }
+  });
+
+  for (let dataServico in agendaPorData) {
+    let blocosHtml = `
+      <div class="card mb-4 shadow-sm border-secondary">
+        <div class="card-header bg-dark text-white font-weight-bold" style="font-size: 1.1rem;">
+          📆 PROGRAMAÇÃO DO DIA: ${dataServico}
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 table-striped">
+              <thead class="bg-light text-secondary" style="font-size:0.9rem;">
+                <tr>
+                  <th style="width: 14%; padding-left:15px;">Tipo de Serviço</th>
+                  <th style="width: 12%;">Sequencial</th>
+                  <th style="width: 18%;">Nº do Processo</th>
+                  <th>Unidade Gestora (UG Origem/Destino)</th>
+                  <th style="width: 10%;" class="text-center">Qtd. Bens</th>
+                  <th style="width: 18%;" class="text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+    agendaPorData[dataServico].forEach(servico => {
+      const tipoServicoUpper = String(servico.tipo).toUpperCase();
+      const ehRecolhimento = tipoServicoUpper === "RECOLHIMENTO";
+      const ehDistribuicao = tipoServicoUpper.includes("DISTRIB");
+
+      let badgeClasse = "badge-transf";
+      if (ehRecolhimento) {
+        badgeClasse = "badge-rec";
+      } else if (ehDistribuicao) {
+        badgeClasse = "badge-distrib";
+      }
+
+      const icone = ehRecolhimento ? "📥" : (ehDistribuicao ? "📦" : "🚛");
+      const descricaoDaUnidade = servico.ugDescricao ? String(servico.ugDescricao) : "UG Não Identificada";
+      const numeroProcesso = servico.processo ? String(servico.processo) : "-";
+      const seqDoc = servico.sequencial ? String(servico.sequencial) : "-";
+      const qtdBens = servico.quantBens ? String(servico.quantBens) : "-";
+      
+      let tipoServico = "N/A";
+      if (servico.tipo) {
+        const tipoOriginal = String(servico.tipo).toUpperCase();
+        if (tipoOriginal === "DISTRIBUICAO_BENS") {
+          tipoServico = "DISTRIBUIÇÃO";
+        } else if (tipoOriginal === "TRANSFERENCIA") {
+          tipoServico = "TRANSFERÊNCIA";
+        } else {
+          tipoServico = String(servico.tipo);
+        }
+      }
+
+      blocosHtml += `
+        <tr style="font-size: 0.95rem;">
+          <td style="padding-left:15px; vertical-align: middle;">
+            <span class="badge ${badgeClasse} p-2 font-weight-bold d-block">${icone} ${tipoServico}</span>
+          </td>
+          <td class="font-weight-bold text-dark" style="vertical-align: middle;">${seqDoc}</td>
+          <td class="font-weight-bold text-primary" style="vertical-align: middle;">${numeroProcesso}</td>
+          <td style="vertical-align: middle; color: #34495e;">${descricaoDaUnidade}</td>
+          <td class="text-center font-weight-bold" style="vertical-align: middle;">
+            ${ehRecolhimento ? `<span class="text-danger">${qtdBens}</span>` : `<span class="text-muted">-</span>`}
+          </td>
+          <td class="text-center" style="vertical-align: middle;">
+            <button class="btn btn-xs btn-info mr-1 font-weight-bold" onclick="baixarDocumentoProcesso(${servico.linhaReal}, '${servico.tipo}', '${numeroProcesso}', this)">📄 Doc</button>
+            <button class="btn btn-xs btn-outline-primary mr-1" onclick="abrirModalAlterarData(${servico.linhaReal}, '${servico.tipo}', '${numeroProcesso}')">✏️</button>
+            <button class="btn btn-xs btn-outline-danger" onclick="solicitarExclusaoAgenda(${servico.linhaReal}, '${servico.tipo}', '${numeroProcesso}')">❌</button>
+          </td>
+        </tr>`;
+    });
+
+    blocosHtml += `</tbody></table></div></div></div>`;
+    container.innerHTML += blocosHtml;
+  }
+}
+
+function baixarDocumentoProcesso(linhaReal, tipo, processo, botao) {
+  const txtOriginal = botao.innerHTML;
+  botao.disabled = true;
+  botao.innerHTML = "⏳";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      botao.disabled = false;
+      botao.innerHTML = txtOriginal;
+      
+      if (res.sucesso) {
+        if (res.tipo === "LINK") {
+          window.open(res.url, '_blank');
+        } else if (res.tipo === "PDF_GERADO") {
+          const linkFonte = `data:application/pdf;base64,${res.base64}`;
+          const gatilho = document.createElement("a");
+          gatilho.href = linkFonte;
+          gatilho.download = res.nomeArquivo;
+          document.body.appendChild(gatilho);
+          gatilho.click();
+          document.body.removeChild(gatilho);
+        }
+      } else {
+        alert(res.mensagem);
+      }
+    })
+    .withFailureHandler(e => {
+      botao.disabled = false;
+      botao.innerHTML = txtOriginal;
+      alert("Falha ao obter documento: " + e.message);
+    })
+    .obterLinkOuGerarGuia(linhaReal, tipo, processo);
+}
+
+function abrirModalAlterarData(linha, tipo, processo) {
+  linhaEdicaoAgenda = linha;
+  tipoEdicaoAgenda = tipo;
+  document.getElementById("txtProcessoAlterar").innerText = processo;
+  document.getElementById("inputNovaDataAgenda").value = "";
+  document.getElementById("modalAlterarDataAgenda").style.display = "flex";
+}
+
+function fecharModalAlterarData() {
+  document.getElementById("modalAlterarDataAgenda").style.display = "none";
+}
+
+function confirmarAlteracaoData() {
+  const novaData = document.getElementById("inputNovaDataAgenda").value;
+  if (!novaData) { alert("Selecione uma nova data."); return; }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.sucesso) {
+        alert("✅ " + res.mensagem);
+        fecharModalAlterarData();
+        buscarAgendaDaData();
+      } else { alert("❌ " + res.mensagem); }
+    })
+    .alterarDataAgendamento(linhaEdicaoAgenda, tipoEdicaoAgenda, novaData);
+}
+
+function solicitarExclusaoAgenda(linha, tipo, processo) {
+  if (confirm(`Tem certeza que deseja EXCLUIR o agendamento do processo ${processo}?\n\nEle sairá do calendário e voltará para o status 'Pendente de Agendamento'.`)) {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res.sucesso) {
+          alert("✅ " + res.mensagem);
+          buscarAgendaDaData();
+        } else { alert("❌ " + res.mensagem); }
+      })
+      .excluirAgendamentoLogistico(linha, tipo);
+  }
+}
+
+function imprimirPdfProgramacao(dataFiltroString) {
+  const btn = document.querySelector("[onclick^='imprimirPdfProgramacao']");
+  const txtOriginal = btn.innerText;
+  btn.disabled = true;
+  btn.innerText = "Gerando PDF...";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false;
+      btn.innerText = txtOriginal;
+      
+      if (res.sucesso) {
+        const linkFonte = `data:application/pdf;base64,${res.base64}`;
+        const gatilhoDownload = document.createElement("a");
+        gatilhoDownload.href = linkFonte;
+        gatilhoDownload.download = res.nomeArquivo;
+        document.body.appendChild(gatilhoDownload);
+        gatilhoDownload.click();
+        document.body.removeChild(gatilhoDownload);
+      } else { alert(res.mensagem); }
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      btn.innerText = txtOriginal;
+      alert("Falha ao gerar PDF: " + e.message);
+    })
+    .gerarPdfProgramacaoDia(dataFiltroString);
+}
+</script>
+
+<!-- MODAL DEFINIR AGENDAMENTO -->
+<div id="modalAgendamentoLogistico" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;">
+  <div style="background: white; padding: 25px; border-radius: 8px; width: 420px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+    <h5 style="margin-top: 0; color: #2c3e50; border-bottom: 2px solid #dee2e6; padding-bottom: 10px;">📅 Definir Agendamento</h5>
+    <p style="margin: 10px 0 5px 0; font-size: 0.95rem;"><strong>Sequencial:</strong> <span id="txtSequencialModal" class="text-dark font-weight-bold"></span></p>
+    <p style="margin: 0 0 5px 0; font-size: 0.95rem;"><strong>Processo:</strong> <span id="txtProcessoModal" class="text-primary font-weight-bold"></span></p>
+    <p style="margin: 0 0 15px 0; font-size: 0.95rem;"><strong>Módulo:</strong> <span id="txtTipoModal" class="text-secondary"></span></p>
+    <div class="form-group">
+      <label for="inputDataAgendamento" style="font-weight: bold; font-size: 0.9rem;">Escolha a Data do Serviço:</label>
+      <input type="date" id="inputDataAgendamento" class="form-control">
+    </div>
+    <div style="text-align: right; margin-top: 20px;">
+      <button class="btn btn-secondary mr-2" onclick="fecharModalAgendamento()">Cancelar</button>
+      <button id="btnConfirmarAgendamento" class="btn btn-success" onclick="salvarAgendamentoLogistico()">Confirmar Agendamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ALTERAR DATA -->
+<div id="modalAlterarDataAgenda" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; justify-content: center; align-items: center;">
+  <div style="background: white; padding: 25px; border-radius: 8px; width: 360px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+    <h5 style="margin-top: 0; color: #007bff; border-bottom: 2px solid #dee2e6; padding-bottom: 10px;">✏️ Reagendar Serviço</h5>
+    <p style="margin: 15px 0;"><strong>Processo:</strong> <span id="txtProcessoAlterar" class="text-primary"></span></p>
+    <div class="form-group">
+      <label style="font-weight: bold; font-size: 0.9rem;">Escolha a Nova Data:</label>
+      <input type="date" id="inputNovaDataAgenda" class="form-control">
+    </div>
+    <div style="text-align: right; margin-top: 20px;">
+      <button class="btn btn-secondary mr-2" onclick="fecharModalAlterarData()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarAlteracaoData()">Salvar Nova Data</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,57 @@
+<!-- ================= TXT ================= -->
+<div id="abaTxt" class="hidden">
+  <div class="home-container" style="padding-top: 20px;">
+    
+    <div class="home-header" style="margin-bottom: 30px; text-align: left;">
+      <h1>Exportação SIADS</h1>
+      <p>Gere os arquivos de integração para o sistema de patrimônio.</p>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 2fr; gap: 20px;">
+      
+      <div class="card" style="height: fit-content;">
+        <div class="section-title">Parâmetros de Busca</div>
+        <div style="margin-bottom: 15px;">
+          <label>Número do TR / Processo</label>
+          <input id="trTxt" placeholder="Ex: 2026000001" style="font-size: 1.1rem; padding: 12px;">
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button onclick="gerarTxt()" class="btn-primary" style="background: #1F4E78;">
+            ⚙️ Gerar Pré-visualização
+          </button>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button onclick="baixarTxt()" id="btnDownloadTxt" class="btn-secondary" disabled>
+              📄 Baixar .TXT
+            </button>
+            <button onclick="baixarMAC()" id="btnDownloadMac" class="btn-secondary" style="background: #6c757d; color: white;" disabled>
+              📥 Baixar .MAC
+            </button>
+          </div>
+        </div>
+        
+        <div id="statusGeracao" style="margin-top: 15px; font-size: 0.85rem; color: #666;">
+          Aguardando comando...
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+          Conteúdo do Arquivo
+          <span id="badgeTipo" style="font-size: 0.7rem; background: #eee; padding: 2px 8px; border-radius: 10px; color: #666;">PREVIEW</span>
+        </div>
+        <textarea id="resultadoTxt" readonly 
+          style="width: 100%; height: 350px; font-family: 'Courier New', monospace; font-size: 12px; background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 8px; border: none; resize: none;" 
+          placeholder="O conteúdo do arquivo aparecerá aqui após a geração..."></textarea>
+        
+        <div style="margin-top: 10px; text-align: right;">
+          <button onclick="copiarTexto()" style="background: none; border: none; color: #1F4E78; cursor: pointer; font-size: 0.9rem;">
+            📋 Copiar para área de transferência
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

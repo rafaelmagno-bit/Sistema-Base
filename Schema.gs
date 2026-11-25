@@ -1,0 +1,35 @@
+// =============================
+// 🧱 MAPA DE COLUNAS ATUALIZADO
+// =============================
+const COL = {
+  SEQUENCIAL: 0,
+  DATA_REGISTRO: 1,
+  USUARIO: 2,
+  TIPO: 3,
+  DATA_PROCESSO: 4,
+  PROCESSO: 5,
+  UG: 6,
+  UORG: 7,
+  EMPENHO: 8,
+  UG_EMPENHO: 9,
+  EDITAL: 10,
+  BENEFICIARIO: 11,
+  CPF: 12,
+  SIAPE: 13,
+  TTP: 14,
+  CORRESPONSAVEL: 15,
+  CPF_CORRESP: 16,
+  SIAPE_CORRESP: 17,
+  NF_NUMERO: 18,
+  FORNECEDOR: 19,
+  VALOR_FRETE_NF: 20,
+  VALOR_TOTAL_NF: 21,
+  ORDEM_ITEM_NF: 22,
+  CADMAT: 23,
+  INFO_COMPLEMENTAR: 24,
+  MARCA: 25, // Novo campo solicitado no layout
+  CONTA: 26,
+  QUANTIDADE: 27,
+  VALOR_UNIT_COM_RATEIO: 28,
+  TOTAL_ITEM_COM_FRETE: 29
+};

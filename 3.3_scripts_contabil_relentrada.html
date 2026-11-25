@@ -1,0 +1,544 @@
+<script>
+// Variável global temporária para guardar os últimos dados pesquisados para as exportações
+let dadosUltimoRelatorioRMB = null;
+let periodoUltimoRelatorioRMB = "";
+
+/**
+ * Função auxiliar para categorizar o tipo de entrada no Agrupamento correto
+ */
+function obterAgrupamento(tipo) {
+  const t = String(tipo || "").trim().toLowerCase();
+  if (t === "empenho") return "Orçamentário - Empenho";
+  if (t === "edital interno") return "Orçamentário - Edital Interno";
+  if (t === "pré-existente" || t === "pre-existente") return "Extraorçamentário - Incorporação";
+  return "Extraorçamentário - Doação";
+}
+
+function inicializarFiltrosRMB() {
+  const selectAno = document.getElementById("rmbAno");
+  if (selectAno) {
+    const anoAtual = new Date().getFullYear();
+    selectAno.innerHTML = "";
+    for (let i = anoAtual; i >= anoAtual - 5; i--) {
+      let opt = document.createElement("option");
+      opt.value = i;
+      opt.innerText = i;
+      selectAno.appendChild(opt);
+    }
+  }
+}
+
+if (window.addEventListener) {
+  window.addEventListener('load', inicializarFiltrosRMB, false);
+} else if (window.attachEvent) {
+  window.attachEvent('onload', inicializarFiltrosRMB);
+}
+
+function gerarRelatorioRMB() {
+  const btn = document.getElementById("btnGerarRMB");
+  const containerDestino = document.getElementById("areaRelatorioRMB");
+  const btnExcel = document.getElementById("btnExportarExcel");
+  const btnPDF = document.getElementById("btnExportarPDF");
+  
+  btn.disabled = true;
+  btnExcel.disabled = true;
+  btnPDF.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+  containerDestino.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p class="mt-2">Buscando e organizando dados contábeis...</p></div>';
+
+  const selectMes = document.getElementById("rmbMes");
+  const filtros = {
+    mes: selectMes.value,
+    ano: document.getElementById("rmbAno").value
+  };
+  
+  periodoUltimoRelatorioRMB = `${selectMes.options[selectMes.selectedIndex].text} de ${filtros.ano}`;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-play-circle"></i> Gerar Relatório';
+
+      if (!res.sucesso) {
+        containerDestino.innerHTML = `<div class="alert alert-danger">⚠️ Erro: ${res.message}</div>`;
+        return;
+      }
+
+      const agrupados = res.dadosAgrupados;
+      dadosUltimoRelatorioRMB = agrupados; 
+      const tipos = Object.keys(agrupados);
+
+      if (tipos.length === 0) {
+        containerDestino.innerHTML = '<div class="alert alert-warning text-center">Nenhum registro de entrada localizado para o período filtrado.</div>';
+        return;
+      }
+
+      btnExcel.disabled = false;
+      btnPDF.disabled = false;
+
+      const mapaResumo = {};
+      let totalGeralGeral = 0;
+
+      let htmlFinal = `
+        <div class="bg-white p-4 shadow-sm rounded border mb-4">
+          <div class="text-center border-bottom pb-3 mb-4">
+            <h3 class="text-dark uppercase font-weight-bold mb-1" style="letter-spacing: 1px;">RELATÓRIO DE ENTRADAS</h3>
+            <h5 class="text-secondary mb-2">COORDENAÇÃO DE BENS MÓVEIS E ALMOXARIFADO CENTRAL</h5>
+            <span class="badge bg-primary px-3 py-2" style="font-size: 14px;">Período de Referência: ${periodoUltimoRelatorioRMB}</span>
+          </div>
+      `;
+
+      tipos.forEach(tipo => {
+        htmlFinal += `
+          <div class="mb-4">
+            <div class="p-2 mb-2 bg-dark text-white fw-bold rounded-top" style="font-size: 13px;">
+              <i class="bi bi-bookmark-fill"></i> TIPO DE ENTRADA: ${tipo}
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered table-striped table-hover mb-0 align-middle" style="font-size: 11px;">
+                <thead class="table-light text-secondary border-bottom">
+                  <tr>
+                    <th style="width: 4%;">Conta</th>
+                    <th style="width: 6%;">Sequencial</th>
+                    <th style="width: 6%;">Data Reg.</th>
+                    <th style="width: 7%;">Processo</th>
+                    <th style="width: 6%;">Nº Empenho</th>
+                    <th style="width: 5%;">UG Emp.</th>
+                    <th style="width: 4%;">UG</th>
+                    <th style="width: 6%;">Doc / NF</th>
+                    <th style="width: 13%;">Fornecedor</th>
+                    <th style="width: 13%;">Beneficiário</th>
+                    <th style="width: 10%;">CPF / SIAPE</th>
+                    <th style="width: 12%;">NL Reg.</th> <th style="width: 8%;" class="text-end">Total Item</th>
+                  </tr>
+                </thead>
+                <tbody>
+        `;
+
+        let subtotalTipo = 0;
+
+        agrupados[tipo].forEach(item => {
+          const valorItemPuro = parseFloat(item.totalItem) || 0;
+          
+          subtotalTipo = Math.round((subtotalTipo + valorItemPuro) * 100) / 100;
+          totalGeralGeral = Math.round((totalGeralGeral + valorItemPuro) * 100) / 100;
+
+          const chaveResumo = `${tipo}|${item.conta}|${item.ug}`;
+          if (!mapaResumo[chaveResumo]) {
+            mapaResumo[chaveResumo] = { 
+              agrupamento: obterAgrupamento(tipo), 
+              tipo: tipo, 
+              conta: item.conta, 
+              ug: item.ug, 
+              total: 0 
+            };
+          }
+          mapaResumo[chaveResumo].total = Math.round((mapaResumo[chaveResumo].total + valorItemPuro) * 100) / 100;
+
+          htmlFinal += `
+            <tr>
+              <td class="fw-bold text-dark">${item.conta}</td>
+              <td class="text-muted">${item.sequencial}</td>
+              <td>${item.dataRegistro}</td>
+              <td>${item.processo}</td>
+              <td>${item.empenho || '-'}</td>
+              <td>${item.ugEmpenho || '-'}</td>
+              <td class="fw-bold text-secondary">${item.ug}</td>
+              <td>${item.documentoNF}</td>
+              <td class="text-truncate" style="max-width: 130px;" title="${item.fornecedor}">${item.fornecedor || '-'}</td>
+              <td class="text-truncate" style="max-width: 130px;" title="${item.beneficiario}">${item.beneficiario || '-'}</td>
+              <td>${item.cpf ? 'CPF: ' + item.cpf : ''} ${item.siape ? '<br>SIAPE: ' + item.siape : ''}</td>
+              <td class="fw-bold font-monospace text-success">${item.nl || '<span class="text-muted fw-normal">-</span>'}</td> <td class="text-end fw-bold">${valorItemPuro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            </tr>
+          `;
+        });
+
+        htmlFinal += `
+                </tbody>
+                <tfoot class="table-light fw-bold border-top">
+                  <tr>
+                    <td colspan="12" class="text-end text-secondary">Subtotal (${tipo}):</td>
+                    <td class="text-end text-dark">${subtotalTipo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        `;
+      });
+
+      // 2. CONSTRUÇÃO DO BLOCO DE RESUMO INSTITUCIONAL DE FECHAMENTO
+      htmlFinal += `
+          <div class="mt-5 pt-4 border-top">
+            <div class="p-2 mb-3 bg-primary text-white fw-bold rounded" style="font-size: 14px;">
+              <i class="bi bi-calculator-fill"></i> RESUMO CONSOLIDADO DO PERÍODO (POR AGRUPAMENTO, TIPO, CONTA E UG)
+            </div>
+            <div class="row justify-content-end">
+              <div class="col-md-10">
+                <table class="table table-sm table-bordered table-hover align-middle shadow-sm bg-light" style="font-size: 12px;">
+                  <thead class="table-secondary font-weight-bold text-dark">
+                    <tr>
+                      <th>Agrupamento</th>
+                      <th>Tipo de Entrada</th>
+                      <th class="text-center" style="width: 15%;">Conta Contábil</th>
+                      <th class="text-center" style="width: 15%;">UG Destino</th>
+                      <th class="text-end" style="width: 25%;">Valor Acumulado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+      `;
+
+      const listaResumo = Object.values(mapaResumo).sort((a, b) => {
+        let compAgrup = a.agrupamento.localeCompare(b.agrupamento);
+        if (compAgrup !== 0) return compAgrup;
+        let compTipo = a.tipo.localeCompare(b.tipo);
+        if (compTipo !== 0) return compTipo;
+        return a.conta.localeCompare(b.conta, undefined, { numeric: true });
+      });
+
+      listaResumo.forEach(res => {
+        htmlFinal += `
+          <tr>
+            <td class="fw-bold text-dark">${res.agrupamento}</td>
+            <td class="text-secondary fw-bold">${res.tipo}</td>
+            <td class="text-center font-monospace fw-bold text-primary">${res.conta}</td>
+            <td class="text-center fw-bold">${res.ug}</td>
+            <td class="text-end fw-bold text-dark">${res.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+          </tr>
+        `;
+      });
+
+      htmlFinal += `
+                  </tbody>
+                  <tfoot class="table-dark font-weight-bold text-white" style="font-size: 13px;">
+                    <tr>
+                      <td colspan="4" class="text-end py-2">TOTAL GERAL DAS ENTRADAS NO PERÍODO:</td>
+                      <td class="text-end py-2 text-warning fw-bold">${totalGeralGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+          
+          <div class="text-center text-muted mt-5" style="font-size: 10px;">
+            Documento gerado eletronicamente em ${new Date().toLocaleString('pt-BR')} - Sistema Gestão de Transportes e Logística
+          </div>
+        </div>
+      `;
+
+      containerDestino.innerHTML = htmlFinal;
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      containerDestino.innerHTML = `<div class="alert alert-danger">⚠️ Falha na comunicação com o servidor: ${err.message}</div>`;
+    })
+    .getRelatorioRMB(filtros);
+}
+
+// =========================================================================
+// 🚀 EXPORTAÇÃO EXCEL (INCLUINDO COLUNA AGRUPAMENTO NO RESUMO)
+// =========================================================================
+function exportarRMBParaExcel() {
+  if (!dadosUltimoRelatorioRMB) return alert("Gere o relatório primeiro.");
+
+  const estiloMoedaInline = "mso-number-format:'#,##0.00'; text-align: right;";
+
+  let xmlContent = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="UTF-8">
+    <style>
+      table { border-collapse: collapse; }
+      td, th { border: 0.5pt solid #cccccc; font-family: Arial; font-size: 10pt; }
+      .header-title { font-size: 14pt; font-weight: bold; text-align: center; }
+      .header-sub { font-size: 11pt; color: #555555; text-align: center; }
+      .badge-periodo { background-color: #e6f2ff; text-align: center; font-weight: bold; }
+      .section-title { background-color: #333333; color: #ffffff; font-weight: bold; font-size: 11pt; }
+      .th-dark { background-color: #f2f2f2; font-weight: bold; color: #333333; }
+      .fw-bold { font-weight: bold; }
+      .txt-center { text-align: center; }
+    </style>
+    </head>
+    <body>
+      <table>
+        <tr><td colspan="13" class="header-title">RELATÓRIO DE ENTRADAS</td></tr>
+        <tr><td colspan="13" class="header-sub">COORDENAÇÃO DE BENS MÓVEIS E ALMOXARIFADO CENTRAL</td></tr>
+        <tr><td colspan="13" class="badge-periodo">Período de Referência: ${periodoUltimoRelatorioRMB}</td></tr>
+        <tr><td colspan="13"></td></tr>
+  `;
+
+  const tipos = Object.keys(dadosUltimoRelatorioRMB);
+  const mapaResumo = {};
+  let totalGeral = 0;
+
+  tipos.forEach(tipo => {
+    xmlContent += `
+      <tr><td colspan="13" class="section-title">TIPO DE ENTRADA: ${tipo}</td></tr>
+      <tr>
+        <th class="th-dark">Conta</th><th class="th-dark">Sequencial</th><th class="th-dark">Data Reg.</th>
+        <th class="th-dark">Processo</th><th class="th-dark">Nº Empenho</th><th class="th-dark">UG Emp.</th>
+        <th class="th-dark">UG</th><th class="th-dark">Doc / NF</th>
+        <th class="th-dark">Fornecedor</th><th class="th-dark">Beneficiário</th>
+        <th class="th-dark">Identificadores</th><th class="th-dark">NL Registro</th>
+        <th class="th-dark">Total Item</th>
+      </tr>
+    `;
+
+    let subtotalTipo = 0;
+    dadosUltimoRelatorioRMB[tipo].forEach(item => {
+      subtotalTipo += item.totalItem;
+      totalGeral += item.totalItem;
+
+      const chave = `${tipo}|${item.conta}|${item.ug}`;
+      if (!mapaResumo[chave]) {
+        mapaResumo[chave] = { 
+          agrupamento: obterAgrupamento(tipo), 
+          tipo: tipo, 
+          conta: item.conta, 
+          ug: item.ug, 
+          total: 0 
+        };
+      }
+      mapaResumo[chave].total += item.totalItem;
+
+      let idfs = (item.cpf ? "CPF: " + item.cpf : "") + (item.siape ? " SIAPE: " + item.siape : "");
+
+      xmlContent += `
+        <tr>
+          <td class="txt-center fw-bold">${item.conta}</td><td class="txt-center">${item.sequencial}</td>
+          <td class="txt-center">${item.dataRegistro}</td><td>${item.processo}</td>
+          <td>${item.empenho || '-'}</td><td class="txt-center">${item.ugEmpenho || '-'}</td>
+          <td class="txt-center fw-bold">${item.ug}</td><td>${item.documentoNF}</td>
+          <td>${item.fornecedor || '-'}</td><td>${item.beneficiario || '-'}</td><td>${idfs}</td>
+          <td class="txt-center fw-bold" style="color: #198754;">${item.nl || '-'}</td>
+          <td style="${estiloMoedaInline} font-weight: bold;">${item.totalItem.toFixed(2)}</td>
+        </tr>
+      `;
+    });
+
+    xmlContent += `
+      <tr>
+        <td colspan="12" style="text-align:right; font-weight:bold; background-color:#f9f9f9;">Subtotal (${tipo}):</td>
+        <td class="fw-bold" style="background-color:#f9f9f9; ${estiloMoedaInline}">${subtotalTipo.toFixed(2)}</td>
+      </tr>
+      <tr><td colspan="13"></td></tr>
+    `;
+  });
+
+  xmlContent += `
+    <tr><td colspan="13"></td></tr>
+    <tr><td colspan="5" class="section-title" style="background-color:#0056b3;">RESUMO CONSOLIDADO (AGRUPAMENTO / TIPO / CONTA / UG)</td><td colspan="8"></td></tr>
+    <tr>
+      <th class="th-dark">Agrupamento</th>
+      <th class="th-dark">Tipo de Entrada</th>
+      <th class="th-dark text-center">Conta Contábil</th>
+      <th class="th-dark text-center">UG Destino</th>
+      <th class="th-dark text-end">Valor Acumulado</th>
+      <td colspan="8"></td>
+    </tr>
+  `;
+
+  const listaResumo = Object.values(mapaResumo).sort((a, b) => 
+    a.agrupamento.localeCompare(b.agrupamento) || 
+    a.tipo.localeCompare(b.tipo) || 
+    a.conta.localeCompare(b.conta, undefined, {numeric:true})
+  );
+  
+  listaResumo.forEach(res => {
+    xmlContent += `
+      <tr>
+        <td class="fw-bold">${res.agrupamento}</td>
+        <td>${res.tipo}</td>
+        <td class="txt-center fw-bold">${res.conta}</td>
+        <td class="txt-center">${res.ug}</td>
+        <td class="fw-bold" style="${estiloMoedaInline}">${res.total.toFixed(2)}</td>
+        <td colspan="8"></td>
+      </tr>
+    `;
+  });
+
+  xmlContent += `
+    <tr style="background-color:#222222; color:#ffffff; font-weight:bold;">
+      <td colspan="4" style="text-align:right; font-weight:bold;">TOTAL GERAL DAS ENTRADAS:</td>
+      <td class="fw-bold" style="color:#ffcc00; ${estiloMoedaInline}">${totalGeral.toFixed(2)}</td>
+      <td colspan="8" style="background-color:#ffffff;"></td>
+    </tr>
+    </table></body></html>
+  `;
+
+  const blob = new Blob([xmlContent], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Relatorio_RMB_Entradas_${new Date().toISOString().slice(0,10)}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// =========================================================================
+// 🚀 EXPORTAÇÃO PDF (INCLUINDO AGRUPAMENTO NO RESUMO)
+// =========================================================================
+async function exportarRMBParaPDF() {
+  if (!dadosUltimoRelatorioRMB) return alert("Gere o relatório primeiro.");
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'mm', 'a4');
+
+  const logoUFPE = "https://lh3.googleusercontent.com/d/1r3GLe3Q36gFfTiCeiTqo-Vc7CQkBZTyD";
+
+  const tipos = Object.keys(dadosUltimoRelatorioRMB);
+  const mapaResumo = {};
+  let totalGeral = 0;
+
+  try {
+    await doc.addImage(logoUFPE, 'PNG', 14, 8, 12, 16);
+  } catch (err) {
+    console.warn("Não foi possível renderizar o logo da UFPE no PDF, continuando sem ele...", err);
+  }
+  
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("UNIVERSIDADE FEDERAL DE PERNAMBUCO", 30, 13);
+  doc.setFontSize(12);
+  doc.setFont("Helvetica", "normal");
+  doc.text("RELATÓRIO DE ENTRADAS CONTÁBEIS (RMB INSTITUCIONAL)", 30, 19);
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Período de Referência: ${periodoUltimoRelatorioRMB}`, 30, 24);
+
+  let currentY = 28;
+
+  tipos.forEach((tipo, index) => {
+    if (index > 0) {
+      doc.addPage();
+      currentY = 15;
+    }
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`TIPO DE ENTRADA: ${tipo}`, 14, currentY);
+    currentY += 4;
+
+    const rows = [];
+    let subtotalTipo = 0;
+
+    dadosUltimoRelatorioRMB[tipo].forEach(item => {
+      subtotalTipo += item.totalItem;
+      totalGeral += item.totalItem;
+
+      const chave = `${tipo}|${item.conta}|${item.ug}`;
+      if (!mapaResumo[chave]) {
+        mapaResumo[chave] = { 
+          agrupamento: obterAgrupamento(tipo), 
+          tipo: tipo, 
+          conta: item.conta, 
+          ug: item.ug, 
+          total: 0 
+        };
+      }
+      mapaResumo[chave].total += item.totalItem;
+
+      let identificadores = "";
+      if (item.cpf) identificadores += `CPF: ${item.cpf}`;
+      if (item.siape) identificadores += (identificadores ? "\n" : "") + `SIAPE: ${item.siape}`;
+
+      rows.push([
+        item.conta,
+        item.sequencial,
+        item.dataRegistro,
+        item.processo,
+        item.empenho || '-',
+        item.ugEmpenho || '-',
+        item.ug,
+        item.documentoNF,
+        item.fornecedor || '-',
+        item.beneficiario || '-',
+        identificadores || '-',
+        item.nl || '-',
+        item.totalItem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      ]);
+    });
+
+    rows.push([
+      { content: `Subtotal (${tipo}):`, colSpan: 12, styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } },
+      { content: subtotalTipo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold', fillColor: [245, 245, 245] } }
+    ]);
+
+    doc.autoTable({
+      startY: currentY,
+      head: [[
+        'Conta', 'Seq.', 'Dt. Reg.', 'Processo', 'Nº Emp.', 'UG Emp.', 'UG',
+        'Doc/NF', 'Fornecedor', 'Beneficiário', 'Identificadores', 'NL Reg.', 'Total Item'
+      ]],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [51, 51, 51], textColor: [255, 255, 255], fontSize: 6.5, halign: 'center', fontStyle: 'bold' },
+      bodyStyles: { fontSize: 5.5, cellPadding: 0.4, textColor: [33, 33, 33], valign: 'middle' },
+      columnStyles: {
+        0: { halign: 'center', fontStyle: 'bold' },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        5: { halign: 'center' },
+        6: { halign: 'center', fontStyle: 'bold' },
+        11: { halign: 'center', fontStyle: 'bold', textColor: [25, 135, 84] },
+        12: { halign: 'right', fontStyle: 'bold' }
+      },
+      margin: { left: 14, right: 14 }
+    });
+
+    currentY = doc.lastAutoTable.finalY + 12;
+  });
+
+  // --- PÁGINA FINAL: RESUMO CONSOLIDADO ---
+  doc.addPage();
+  
+  try {
+    await doc.addImage(logoUFPE, 'PNG', 14, 8, 12, 16);
+  } catch (e) {}
+
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text("UNIVERSIDADE FEDERAL DE PERNAMBUCO", 30, 13);
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text("RESUMO CONSOLIDADO DO PERÍODO (POR AGRUPAMENTO, TIPO, CONTA E UG)", 30, 19);
+
+  const resumoRows = [];
+  const listaResumo = Object.values(mapaResumo).sort((a, b) => 
+    a.agrupamento.localeCompare(b.agrupamento) || 
+    a.tipo.localeCompare(b.tipo) || 
+    a.conta.localeCompare(b.conta, undefined, { numeric: true })
+  );
+
+  listaResumo.forEach(res => {
+    resumoRows.push([
+      res.agrupamento, res.tipo, res.conta, res.ug, res.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    ]);
+  });
+
+  resumoRows.push([
+    { content: "TOTAL GERAL DAS ENTRADAS NO PERÍODO:", colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [34, 34, 34], textColor: [255, 255, 255] } },
+    { content: totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), styles: { halign: 'right', fontStyle: 'bold', fillColor: [34, 34, 34], textColor: [255, 204, 0] } }
+  ]);
+
+  doc.autoTable({
+    startY: 26,
+    head: [['Agrupamento', 'Tipo de Entrada', 'Conta Contábil', 'UG Destino', 'Valor Acumulado']],
+    body: resumoRows,
+    theme: 'grid',
+    headStyles: { fillColor: [0, 86, 179], textColor: [255, 255, 255], fontSize: 9, halign: 'left' },
+    bodyStyles: { fontSize: 8.5 },
+    columnStyles: {
+      0: { fontStyle: 'bold' },
+      2: { halign: 'center', fontStyle: 'bold' },
+      3: { halign: 'center', fontStyle: 'bold' },
+      4: { halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  doc.save(`Relatorio_RMB_Institucional_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+</script>

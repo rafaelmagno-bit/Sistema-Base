@@ -1,0 +1,315 @@
+<script>
+let cacheLinhasMovimentacao = null;
+let cacheContasDisponiveis = []; // 🌟 Guarda as contas da aba LISTA globalmente
+
+// Inicializa o combo de anos ao clicar para abrir a aba
+function preencherAnosMovNL() {
+  const selectAno = document.getElementById("movNlAno");
+  if (selectAno) {
+    const anoAtual = new Date().getFullYear();
+    selectAno.innerHTML = "";
+    for (let i = anoAtual; i >= anoAtual - 3; i--) {
+      let opt = document.createElement("option");
+      opt.value = i;
+      opt.innerText = i;
+      selectAno.appendChild(opt);
+    }
+  }
+}
+
+// 🌟 FUNÇÃO AUXILIAR: Gera as opções do Select com base na aba LISTA
+function gerarOpcoesContas(valorSelecionado) {
+  let html = '<option value="">Selecione...</option>';
+  cacheContasDisponiveis.forEach(conta => {
+    if (!conta) return;
+    const stringConta = String(conta).trim();
+    const selecionado = (stringConta === String(valorSelecionado).trim()) ? "selected" : "";
+    html += `<option value="${stringConta}" ${selecionado}>${stringConta}</option>`;
+  });
+  return html;
+}
+
+function buscarMovimentacoesNL() {
+  const btn = document.getElementById("btnBuscarMovNL");
+  const container = document.getElementById("containerResultadoMovNL");
+  const corpo = document.getElementById("corpoTabelaMovNL");
+  
+  const filtros = {
+    mes: document.getElementById("movNlMes").value,
+    ano: document.getElementById("movNlAno").value
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+  container.classList.add("hidden");
+  corpo.innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search"></i> Filtrar Movimentações';
+
+      if (!res.sucesso) {
+        alert("⚠️ Erro: " + (res.message || res.mensagem));
+        return;
+      }
+
+      if (!res.movimentacoes || res.movimentacoes.length === 0) {
+        alert("ℹ️ Nenhuma movimentação fechada encontrada para o período selecionado.");
+        return;
+      }
+
+      // 🌟 Salva as contas vindas do servidor (coluna B da aba LISTA) no cache local
+      cacheContasDisponiveis = res.contas || [];
+      cacheLinhasMovimentacao = res.movimentacoes;
+      
+      let html = "";
+      res.movimentacoes.forEach(item => {
+        const nlsSai  = item.nlSaida ? item.nlSaida.split("|") : [];
+        const ctsSai  = item.contaSaida ? item.contaSaida.split("|") : [];
+        const vlrsSai = item.valorSaida ? item.valorSaida.split("|") : [];
+
+        const nlsEnt  = item.nlEntrada ? item.nlEntrada.split("|") : [];
+        const ctsEnt  = item.contaEntrada ? item.contaEntrada.split("|") : [];
+        const vlrsEnt = item.valorEntrada ? item.valorEntrada.split("|") : [];
+
+        const maxSublinhas = Math.max(1, nlsSai.length, nlsEnt.length);
+
+        for (let i = 0; i < maxSublinhas; i++) {
+          const vNlSai   = nlsSai[i] || "";
+          const vCtSai   = ctsSai[i] || "";
+          const vVlrSai  = vlrsSai[i] || "";
+
+          const vNlEnt   = nlsEnt[i] || "";
+          const vCtEnt   = ctsEnt[i] || "";
+          const vVlrEnt  = vlrsEnt[i] || "";
+
+          const flagAlerta = (!vNlSai || !vCtSai || !vVlrSai || !vNlEnt || !vCtEnt || !vVlrEnt) ? "alerta-pendente" : "";
+
+          const orig = item.ugOrigem || "N/A";
+          const dest = item.ugDestino || "N/A";
+
+          html += `
+            <tr data-linha="${item.linhaReal}" class="${flagAlerta}">
+              ${i === 0 ? `
+                <td rowspan="${maxSublinhas}" class="align-middle fw-bold text-secondary text-center">${item.sequencial || "-"}</td>
+                <td rowspan="${maxSublinhas}" class="align-middle text-center font-weight-bold bg-light" style="font-size:0.82rem;">${item.processo || '-'}</td>
+                <td rowspan="${maxSublinhas}" class="align-middle text-center bg-light" style="font-size:0.75rem;">${item.tipoMovimentacao || 'Transf. UG'}</td>
+                <td rowspan="${maxSublinhas}" class="align-middle text-center bg-light" style="font-size:0.8rem;">${item.dataEnvioDBM || '-'}</td>
+                <td rowspan="${maxSublinhas}" class="align-middle bg-light" style="font-size:0.75rem; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="Origem: ${orig}\nDestino: ${dest}">
+                  <strong>O:</strong> ${orig}<br><strong>D:</strong> ${dest}
+                </td>
+              ` : ""}
+
+              <td>
+                <input type="text" class="form-control form-control-sm uppercase-input input-nl-saida" value="${vNlSai}" placeholder="NL Saída">
+              </td>
+              <td>
+                <select class="form-control form-control-sm input-conta-saida">
+                  ${gerarOpcoesContas(vCtSai)}
+                </select>
+              </td>
+              <td>
+                <input type="text" class="form-control form-control-sm text-right input-valor-saida" value="${vVlrSai}" placeholder="0,00" onblur="formatarMoedaInput(this)">
+              </td>
+
+              <td>
+                <input type="text" class="form-control form-control-sm uppercase-input input-nl-entrada" value="${vNlEnt}" placeholder="NL Entrada">
+              </td>
+              <td>
+                <select class="form-control form-control-sm input-conta-entrada">
+                  ${gerarOpcoesContas(vCtEnt)}
+                </select>
+              </td>
+              <td>
+                <input type="text" class="form-control form-control-sm text-right input-valor-entrada" value="${vVlrEnt}" placeholder="0,00" onblur="formatarMoedaInput(this)">
+              </td>
+
+              <td class="text-center align-middle">
+                ${i === 0 ? `
+                  <button class="btn-action-add" title="Adicionar Desdobramento Contábil" onclick="duplicarSublinhaContabilMov(this)">+</button>
+                ` : `
+                  <button class="btn-action-del" title="Remover Desdobramento" onclick="removerSublinhaContabilMov(this)"><i class="bi bi-trash"></i></button>
+                `}
+              </td>
+            </tr>
+          `;
+        }
+      });
+
+      corpo.innerHTML = html;
+      container.classList.remove("hidden");
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search"></i> Filtrar Movimentações';
+      alert("💥 Falha fatal de comunicação com o servidor: " + err.message);
+    })
+    .buscarMovimentacoesParaNL(filtros);
+}
+
+function duplicarSublinhaContabilMov(botao) {
+  const trPai = botao.closest("tr");
+  const AppLinhaReal = trPai.getAttribute("data-linha");
+  
+  const novaTr = document.createElement("tr");
+  novaTr.setAttribute("data-linha", AppLinhaReal);
+  
+  novaTr.innerHTML = `
+    <td><input type="text" class="form-control form-control-sm uppercase-input input-nl-saida" placeholder="NL Saída"></td>
+    <td>
+      <select class="form-control form-control-sm input-conta-saida">
+        ${gerarOpcoesContas("")}
+      </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm text-right input-valor-saida" placeholder="0,00" onblur="formatarMoedaInput(this)"></td>
+    
+    <td><input type="text" class="form-control form-control-sm uppercase-input input-nl-entrada" placeholder="NL Entrada"></td>
+    <td>
+      <select class="form-control form-control-sm input-conta-entrada">
+        ${gerarOpcoesContas("")}
+      </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm text-right input-valor-entrada" placeholder="0,00" onblur="formatarMoedaInput(this)"></td>
+    
+    <td class="text-center align-middle">
+      <button class="btn-action-del" title="Remover Desdobramento" onclick="removerSublinhaContabilMov(this)"><i class="bi bi-trash"></i></button>
+    </td>
+  `;
+
+  const primeiraTrDoBloco = document.querySelector(`tr[data-linha="${AppLinhaReal}"]`);
+  if (primeiraTrDoBloco) {
+    const tdsFixas = primeiraTrDoBloco.querySelectorAll("td[rowspan]");
+    tdsFixas.forEach(td => {
+      const rsAtual = parseInt(td.getAttribute("rowspan") || "1", 10);
+      td.setAttribute("rowspan", rsAtual + 1);
+    });
+  }
+
+  const todasDoMesmoBloco = document.querySelectorAll(`tr[data-linha="${AppLinhaReal}"]`);
+  const ultimaTrDoBloco = todasDoMesmoBloco[todasDoMesmoBloco.length - 1];
+  ultimaTrDoBloco.parentNode.insertBefore(novaTr, ultimaTrDoBloco.nextSibling);
+}
+
+function removerSublinhaContabilMov(botao) {
+  const trAlvo = botao.closest("tr");
+  const AppLinhaReal = trAlvo.getAttribute("data-linha");
+
+  const primeiraTrDoBloco = document.querySelector(`tr[data-linha="${AppLinhaReal}"]`);
+  if (primeiraTrDoBloco) {
+    const tdsFixas = primeiraTrDoBloco.querySelectorAll("td[rowspan]");
+    tdsFixas.forEach(td => {
+      const rsAtual = parseInt(td.getAttribute("rowspan") || "1", 10);
+      if (rsAtual > 1) td.setAttribute("rowspan", rsAtual - 1);
+    });
+  }
+
+  trAlvo.remove();
+}
+
+function formatarMoedaInput(input) {
+  let v = input.value.replace(/\D/g, "");
+  if (!v) { input.value = ""; return; }
+  v = (parseInt(v, 10) / 100).toFixed(2);
+  v = v.replace(".", ",");
+  v = v.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  input.value = v;
+}
+
+function gravarMovimentacoesNL() {
+  const btn = document.getElementById("btnSalvarMovNL");
+  const linhasTr = document.querySelectorAll("#corpoTabelaMovNL tr");
+  
+  if (linhasTr.length === 0) return;
+
+  let agrupamento = {};
+
+  // 🔥 Nova função auxiliar interna inteligente e à prova de falhas repetidas
+  function formatarParaNumeroPuro(valorTexto) {
+    if (!valorTexto) return "0";
+    let t = String(valorTexto).replace(/[R$\s]/g, "").trim(); // Remove R$ e espaços
+    if (!t || t === "0") return "0";
+
+    // CASO A: Tem vírgula e ponto (ex: "1.250,45") -> Remove pontos de milhar e troca vírgula por ponto
+    if (t.includes(",") && t.includes(".")) {
+      t = t.replace(/\./g, "").replace(",", ".");
+    } 
+    // CASO B: Tem APENAS vírgula (ex: "799,82") -> Transforma a vírgula em ponto
+    else if (t.includes(",") && !t.includes(".")) {
+      t = t.replace(",", ".");
+    }
+    // CASO C: Tem apenas ponto (ex: "799.82") -> Já está no padrão americano/puro correto!
+    // Se passasse pela regra antiga, perderia o ponto virando "79982". Agora ele é mantido intacto.
+
+    // Garante que o retorno é uma string numérica válida (ou 0 se o parseFloat falhar)
+    let n = parseFloat(t);
+    return isNaN(n) ? "0" : String(n);
+  }
+
+  linhasTr.forEach(tr => {
+    const AppLinhaReal = tr.getAttribute("data-linha");
+    if (!agrupamento[AppLinhaReal]) {
+      agrupamento[AppLinhaReal] = {
+        linhaReal: AppLinhaReal,
+        nlsSaida: [], ctsSaida: [], vlrsSaida: [],
+        nlsEntrada: [], ctsEntrada: [], vlrsEntrada: []
+      };
+    }
+
+    const inputNlSaida = tr.querySelector(".input-nl-saida");
+    if (inputNlSaida) {
+      agrupamento[AppLinhaReal].nlsSaida.push(inputNlSaida.value.trim());
+      agrupamento[AppLinhaReal].ctsSaida.push(tr.querySelector(".input-conta-saida").value);
+      
+      const vRawSaida = tr.querySelector(".input-valor-saida").value;
+      const vPuroSaida = formatarParaNumeroPuro(vRawSaida);
+      agrupamento[AppLinhaReal].vlrsSaida.push(vPuroSaida);
+    }
+
+    const inputNlEntrada = tr.querySelector(".input-nl-entrada");
+    if (inputNlEntrada) {
+      agrupamento[AppLinhaReal].nlsEntrada.push(inputNlEntrada.value.trim());
+      agrupamento[AppLinhaReal].ctsEntrada.push(tr.querySelector(".input-conta-entrada").value);
+      
+      const inputVlrEntrada = tr.querySelector(".input-valor-entrada");
+      const vPuroEntrada = inputVlrEntrada ? formatarParaNumeroPuro(inputVlrEntrada.value) : "0";
+      agrupamento[AppLinhaReal].vlrsEntrada.push(vPuroEntrada);
+    }
+  });
+
+  const dadosLote = Object.values(agrupamento).map(item => {
+    return {
+      linhaReal: item.linhaReal,
+      nlSaida: item.nlsSaida.join("|"),
+      contaSaida: item.ctsSaida.join("|"),
+      valorSaida: item.vlrsSaida.join("|"),
+      nlRecebimento: item.nlsEntrada.join("|"),       
+      contaRecebimento: item.ctsEntrada.join("|"),    
+      valorRecebimento: item.vlrsEntrada.join("|")    
+    };
+  });
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-save"></i> Salvar Alterações';
+
+      if (!res.sucesso) {
+        alert("⚠️ Falha ao salvar: " + (res.message || res.mensagem));
+        return;
+      }
+
+      alert("🎉 Notas de Lançamento e Bens atualizados com sucesso!");
+      buscarMovimentacoesNL(); 
+    })
+    .withFailureHandler(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-save"></i> Salvar Alterações';
+      alert("💥 Erro crítico no envio do lote de NL: " + err.message);
+    })
+    .salvarNLMovimentacao(dadosLote);
+}
+</script>

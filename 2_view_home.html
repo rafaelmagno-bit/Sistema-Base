@@ -1,0 +1,68 @@
+<!-- ================= HOME ================= -->
+<div id="abaHome">
+  <div class="home-container">
+    
+    <div class="home-header">
+      <h1>Sistema de Apoio a Gestão Patrimonial</h1>
+      <p>Selecione a operação patrimonial desejada</p>
+    </div>
+
+    <div class="menu-grid">
+      
+      <div class="menu-card" onclick="mostrarAba('cadastro')">
+        <div class="menu-icon">📋</div>
+        <h3>Cadastro</h3>
+        <p>Registrar novas entradas de bens e gerar TR</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('movimentacao')">
+        <div class="menu-icon">🚛</div>
+        <h3>Transferências</h3>
+        <p>Movimentar bens entre unidades</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('recolhimento')">
+        <div class="menu-icon">🏢</div>
+        <h3>Recolhimentos</h3>
+        <p>Enviar bens para o Depósito</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('saidas')">
+        <div class="menu-icon">📤</div>
+        <h3>Saídas</h3>
+        <p>Informar e registrar saídas definitivas de bens</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('cargaDescarga'); carregarPainelAgendamentos();">
+        <div class="menu-icon">📅</div>
+        <h3>Agendamentos</h3>
+        <p>Mapear pendências e agendar serviços logísticos</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('calendarioLogistico'); inicializarCalendario();">
+        <div class="menu-icon">📆</div>
+        <h3>Calendário</h3>
+        <p>Visualizar o cronograma diário de carga e descarga</p>
+      </div>
+
+      <div class="menu-card" onclick="mostrarAba('cadmat')">
+        <div class="menu-icon">📦</div>
+        <h3>CADMAT</h3>
+        <p>Catálogo unificado de materiais e contas</p>
+      </div>
+
+      <!-- 🏷️ NOVO MÓDULO: FIXAÇÃO DE ETIQUETAS -->
+      <div class="menu-card" onclick="window.open('https://script.google.com/macros/s/AKfycbx80GZjTAVFVWz26jtFpx9VentKPc4AQbDJcj81xVxWeC60M5-fd045foAkmzZt3tqT/exec', '_blank')">
+        <div class="menu-icon">🏷️</div>
+        <h3>Fixação de Etiquetas</h3>
+        <p>Acessar o módulo de controle e fixação de etiquetas</p>
+      </div>
+
+    </div>
+    
+    <div style="margin-top: 50px; text-align: center; color: #aaa; font-size: 0.8rem; border-top: 1px solid #eee; padding-top: 20px;">
+       UFPE | Coordenação de Bens Móveis e Almoxarifado Central | v<?= VERSAO_SISTEMA ?>
+    </div>
+
+  </div>
+</div>

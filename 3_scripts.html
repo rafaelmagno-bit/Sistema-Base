@@ -1,0 +1,2042 @@
+<script>
+
+// ================= CACHE =================
+// ================= CACHE GLOBAL =================
+window.listaContas = [];
+window.listaContasHTML = "";
+window.listaServidores = [];
+window.cacheCadmat = {};
+window.debounceTimers = {};
+window.listaRecolhimento = [];
+window.listaDestinos = [];
+window.mapaDestinoUorg = {};
+window.cacheOrganograma = [];
+window.cacheUGs = []; // Garantindo escopo global na janela
+
+// ================= ABAS =================
+// Variável global para reter o perfil no front-end após o primeiro carregamento
+let perfilUsuarioGlobal = null;
+
+function mostrarAba(aba) {
+  if (perfilUsuarioGlobal) {
+    validarEExecutarTrocaAba(aba, perfilUsuarioGlobal);
+  } else {
+    // Se ainda não buscou o perfil do servidor, busca antes de mudar
+    google.script.run
+      .withSuccessHandler(function(perfil) {
+        perfilUsuarioGlobal = perfil;
+        validarEExecutarTrocaAba(aba, perfil);
+      })
+      .getPerfilUsuario();
+  }
+}
+
+// Valida se a aba clicada é permitida para o perfil do usuário
+function validarEExecutarTrocaAba(aba, perfil) {
+  const abaNormalizada = aba.toLowerCase();
+
+  // Travas rígidas para o perfil VISUALIZADOR
+  if (perfil === "VISUALIZADOR") {
+    const abasPermitidas = ["home", "conversao", "cadmat", "consulta"];
+    if (!abasPermitidas.includes(abaNormalizada)) {
+      alert("Acesso negado: Seu perfil (VISUALIZADOR) só permite acesso ao módulo de Consultas.");
+      return;
+    }
+  }
+
+  // Travas rígidas para o perfil DBM
+  if (perfil === "DBM") {
+    const abasBloqueadas = ["relatorio", "usuarios"]; // Relatórios Gerenciais e Gerenciar Usuários
+    if (abasBloqueadas.includes(abaNormalizada)) {
+      alert("Acesso negado: Seu perfil (DBM) não possui permissão para acessar este módulo.");
+      return;
+    }
+  }
+
+  // Se passou pelas regras ou é ADMIN, executa a troca visual padrão do seu sistema:
+  document.querySelectorAll("[id^='aba']").forEach(el => el.classList.add("hidden"));
+  
+  const idAbaAlvo = "aba" + capitalize(aba);
+  const elementoAba = document.getElementById(idAbaAlvo);
+  if (elementoAba) {
+    elementoAba.classList.remove("hidden");
+  }
+  
+  if (aba === "usuarios" && typeof inicializarModuloUsuarios === "function") {
+    inicializarModuloUsuarios();
+  }
+}
+
+function capitalize(str){
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+
+// ================= INIT =================
+window.onload = () => {
+  const modal = document.getElementById("modalOverlay");
+  if (modal) modal.classList.add("hidden");
+
+  esconderLoader();
+  carregarListas();
+  carregarServidores();
+  carregarUsuario();
+  mostrarAba("home");
+  adicionarNotaFiscal();
+  aplicarPermissoes();
+  preencherAnos();
+  preencherAnosBusca();
+
+  google.script.run
+  .withSuccessHandler(lista => {
+    listaDestinos = lista;
+    lista.forEach(item => {
+      mapaDestinoUorg[item.destino] = item.uorg;
+    });
+  })
+  .getListaDestinos();
+
+  // Carrega os dados do Organograma (UORGs)
+  google.script.run
+  .withSuccessHandler(dados => {
+    cacheOrganograma = dados || [];
+  })
+  .carregarOrganograma();
+
+  // 🔥 Novo: Carrega os dados das UGs para a memória
+  google.script.run
+  .withSuccessHandler(dados => {
+    cacheUGs = dados || [];
+  })
+  .carregarListaUGsOrganograma();
+};
+
+// ================= LISTAS =================
+function carregarListas() {
+  google.script.run.withSuccessHandler(d => {
+    listaContas = d.contas || [];
+
+    listaContasHTML = "<option></option>" +
+      listaContas.map(c => `<option>${c}</option>`).join("");
+
+    preencherSelectGlobal("tipo", d.tipos);
+    // REMOVIDO: preencherSelectGlobal("ug", d.ugs); <- Agora a UG é inteligente e autocompletável!
+    preencherSelectGlobal("ugRecolhimento", d.ugs);
+    preencherSelectGlobal("movUgDestino", d.ugs);
+
+  }).getListas();
+}
+
+// Executa o controle de visibilidade dos menus assim que o sistema carrega
+document.addEventListener("DOMContentLoaded", function() {
+  google.script.run
+    .withSuccessHandler(function(perfilLogado) {
+      aplicarRestricoesDeMenu(perfilLogado);
+    })
+    .getPerfilUsuario();
+});
+
+
+// ================= MENUS DE ACORDO COM O PERFIL =================
+function aplicarRestricoesDeMenu(perfil) {
+  console.log("Perfil ativo no sistema: " + perfil);
+  
+  // Se for ADMIN, não oculta nada (acesso total garantido)
+  if (perfil === "ADMIN") return;
+
+  // Captura todos os blocos de dropdown do menu
+  const dropdowns = document.querySelectorAll(".menu-dropdown");
+
+  dropdowns.forEach(dropdown => {
+    const botao = dropdown.querySelector(".dropbtn");
+    if (!botao) return;
+
+    const nomeMenu = botao.innerText.trim().toLowerCase();
+
+    if (perfil === "DBM") {
+      // O perfil DBM NÃO tem acesso a: "relatórios gerenciais" e "configurações"
+      if (nomeMenu.includes("relatórios gerenciais") || nomeMenu.includes("configurações")) {
+        dropdown.style.display = "none";
+      }
+    } 
+    else if (perfil === "VISUALIZADOR") {
+      // O perfil VISUALIZADOR SÓ tem acesso a "consultas" (Início é um botão comum, não dropdown)
+      if (!nomeMenu.includes("consultas")) {
+        dropdown.style.display = "none";
+      }
+    }
+  });
+}
+
+// ================= FUNÇÕES DE BUSCA DA UG (NOVO) =================
+
+function buscarUgDinamico(valorBusca) {
+  const containerResultados = document.getElementById("resultadoBuscaUg");
+  const inputRealUg = document.getElementById("ug");
+  const inputBuscaUorg = document.getElementById("buscaUorg");
+  const containerResultadosUorg = document.getElementById("resultadoBuscaUorg");
+  const inputRealUorg = document.getElementById("uorg");
+
+  if (!containerResultados) return;
+  containerResultados.innerHTML = "";
+
+  const termo = valorBusca.toLowerCase().trim();
+  if (termo.length < 2) return;
+
+  // Filtra as UGs por Código, Descrição ou Sigla
+  const filtrados = cacheUGs.filter(item => {
+    return item.ug.toLowerCase().includes(termo) ||
+           item.descricao.toLowerCase().includes(termo) ||
+           item.sigla.toLowerCase().includes(termo);
+  });
+
+  if (filtrados.length === 0) {
+    containerResultados.innerHTML = "<div style='padding: 8px; color: #856404; background-color: #fff3cd; font-size: 0.85rem;'>Nenhuma UG localizada.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const divOpcao = document.createElement("div");
+    divOpcao.style.padding = "8px 12px";
+    divOpcao.style.cursor = "pointer";
+    divOpcao.style.borderBottom = "1px solid #e9ecef";
+    divOpcao.style.backgroundColor = "#fff";
+
+    divOpcao.innerHTML = `
+      <div style="font-weight: bold; color: #1F4E78; font-size: 0.9rem;">${item.ug} - ${item.sigla}</div>
+      <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;">${item.descricao}</div>
+    `;
+
+    divOpcao.addEventListener("click", () => {
+      document.getElementById("buscaUg").value = `${item.ug} - ${item.sigla}`;
+      if (inputRealUg) inputRealUg.value = item.ug; // Alimenta o ID oculto esperado pelo sistema
+
+      // 🔥 Reseta e Libera o campo de UORG de forma imediata
+      if (inputBuscaUorg) {
+        inputBuscaUorg.value = "";
+        inputBuscaUorg.disabled = false;
+        inputBuscaUorg.placeholder = "Procure por Descrição, SIPAC ou UORG...";
+      }
+      if (containerResultadosUorg) containerResultadosUorg.innerHTML = "";
+      if (inputRealUorg) inputRealUorg.value = "";
+
+      containerResultados.innerHTML = ""; // Fecha a janelinha da UG
+    });
+
+    divOpcao.addEventListener("mouseenter", () => divOpcao.style.backgroundColor = "#f8f9fa");
+    divOpcao.addEventListener("mouseleave", () => divOpcao.style.backgroundColor = "#fff");
+
+    containerResultados.appendChild(divOpcao);
+  });
+}
+
+// ================= FUNÇÃO DE BUSCA DA UG EMPENHO (NOVO) =================
+function buscarUgEmpenhoDinamico(valorBusca) {
+  const containerResultados = document.getElementById("resultadoBuscaUgEmpenho");
+  const inputRealUgEmpenho = document.getElementById("ugEmpenho");
+
+  if (!containerResultados) return;
+  containerResultados.innerHTML = "";
+
+  const termo = valorBusca.toLowerCase().trim();
+  if (termo.length < 2) return;
+
+  // Filtra as UGs no cache por Código, Descrição ou Sigla
+  const filtrados = cacheUGs.filter(item => {
+    return item.ug.toLowerCase().includes(termo) ||
+           item.descricao.toLowerCase().includes(termo) ||
+           item.sigla.toLowerCase().includes(termo);
+  });
+
+  if (filtrados.length === 0) {
+    containerResultados.innerHTML = "<div style='padding: 8px; color: #856404; background-color: #fff3cd; font-size: 0.85rem;'>Nenhuma UG localizada.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const divOpcao = document.createElement("div");
+    divOpcao.style.padding = "8px 12px";
+    divOpcao.style.cursor = "pointer";
+    divOpcao.style.borderBottom = "1px solid #e9ecef";
+    divOpcao.style.backgroundColor = "#fff";
+
+    divOpcao.innerHTML = `
+      <div style="font-weight: bold; color: #1F4E78; font-size: 0.9rem;">${item.ug} - ${item.sigla}</div>
+      <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;">${item.descricao}</div>
+    `;
+
+    divOpcao.addEventListener("click", () => {
+      document.getElementById("buscaUgEmpenho").value = `${item.ug} - ${item.sigla}`;
+      if (inputRealUgEmpenho) inputRealUgEmpenho.value = item.ug; // Alimenta o hidden com o código puro
+
+      containerResultados.innerHTML = ""; // Fecha a caixinha
+    });
+
+    divOpcao.addEventListener("mouseenter", () => divOpcao.style.backgroundColor = "#f8f9fa");
+    divOpcao.addEventListener("mouseleave", () => divOpcao.style.backgroundColor = "#fff");
+
+    containerResultados.appendChild(divOpcao);
+  });
+}
+
+// ================= FUNÇÕES DO ORGANOGRAMA VINCULADO (UORG) =================
+
+function buscarUorgDinamico(valorBusca) {
+  const inputRealUg = document.getElementById("ug");
+  const containerResultados = document.getElementById("resultadoBuscaUorg");
+  const inputRealUorg = document.getElementById("uorg");
+  
+  if (!inputRealUg || !containerResultados) return;
+  containerResultados.innerHTML = "";
+  
+  const ugSelecionada = inputRealUg.value.trim();
+  const termo = valorBusca.toLowerCase().trim();
+  
+  if (termo.length < 2) return; 
+
+  const filtrados = cacheOrganograma.filter(item => {
+    const mesmaUg = String(item.ug).trim() === ugSelecionada;
+    const bateTexto = 
+      item.descricao.toLowerCase().includes(termo) ||
+      item.sipac.toLowerCase().includes(termo) ||
+      item.uorg.toLowerCase().includes(termo);
+      
+    return mesmaUg && bateTexto;
+  });
+
+  if (filtrados.length === 0) {
+    containerResultados.innerHTML = "<div style='padding: 8px; color: #856404; background-color: #fff3cd; font-size: 0.85rem;'>Nenhuma UORG localizada para esta UG.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const divOpcao = document.createElement("div");
+    divOpcao.style.padding = "8px 12px";
+    divOpcao.style.cursor = "pointer";
+    divOpcao.style.borderBottom = "1px solid #e9ecef";
+    divOpcao.style.backgroundColor = "#fff";
+    
+    divOpcao.innerHTML = `
+      <div style="font-weight: bold; color: #1F4E78; font-size: 0.9rem;">${item.descricao}</div>
+      <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;">
+        UORG: <span style="color:#333; font-weight:bold;">${item.uorg}</span> | SIPAC: <span style="color:#333; font-weight:bold;">${item.sipac}</span>
+      </div>
+    `;
+    
+    divOpcao.addEventListener("click", () => {
+      document.getElementById("buscaUorg").value = `${item.uorg} - ${item.descricao}`;
+      if (inputRealUorg) inputRealUorg.value = item.uorg; 
+      containerResultados.innerHTML = ""; 
+    });
+
+    divOpcao.addEventListener("mouseenter", () => divOpcao.style.backgroundColor = "#f8f9fa");
+    divOpcao.addEventListener("mouseleave", () => divOpcao.style.backgroundColor = "#fff");
+
+    containerResultados.appendChild(divOpcao);
+  });
+}
+
+function preencherSelectGlobal(id, lista){
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  el.innerHTML = "<option value=''>Selecione</option>" +
+    lista.map(v => `<option>${v}</option>`).join("");
+}
+
+// ================= USUÁRIO =================
+function carregarUsuario() {
+
+  // 🔥 pega e-mail via sessão do Google (frontend)
+  const email = SessionEmailFallback();
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      document.getElementById("usuarioLogado").innerHTML =
+        resp ? "👤 " + resp : "Usuário não identificado";
+    })
+    .getUsuarioLogado(email);
+}
+
+function SessionEmailFallback() {
+  try {
+    return google.script.host.origin
+      ? "" // ambiente web app não expõe direto
+      : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+// ================= SERVIDORES =================
+function carregarServidores() {
+  google.script.run.withSuccessHandler(lista => {
+    listaServidores = lista || [];
+  }).getServidores();
+}
+
+// ================= AUTOCOMPLETE SERVIDOR =================
+function filtrarServidores() {
+
+  const termo = document.getElementById("nomeServidor").value.toLowerCase();
+  const dropdown = document.getElementById("dropdownServidores");
+
+  if (!termo) {
+    dropdown.innerHTML = "";
+    return;
+  }
+
+  dropdown.innerHTML = listaServidores
+    .filter(s => s.nome.toLowerCase().includes(termo))
+    .slice(0,10)
+    .map(s => `
+      <div class="dropdown-item"
+        onclick="selecionarServidor('${s.nome}')">
+        ${s.nome}
+      </div>`).join("");
+}
+
+function selecionarServidor(nome) {
+
+  const s = listaServidores.find(x => x.nome === nome);
+  if (!s) return;
+
+  document.getElementById("nomeServidor").value = s.nome;
+  document.getElementById("cpfServidor").value = s.cpf;
+  document.getElementById("siapeServidor").value = s.siape;
+  document.getElementById("emailServidor").value = s.email || "";
+  document.getElementById("telefoneServidor").value = s.telefone || "";
+
+  document.getElementById("dropdownServidores").innerHTML = "";
+}
+
+function salvarContatosServidorTela() {
+  const cpf = document.getElementById("cpfServidor").value;
+  const nome = document.getElementById("nomeServidor").value;
+  const siape = document.getElementById("siapeServidor").value;
+  const email = document.getElementById("emailServidor").value;
+  const telefone = document.getElementById("telefoneServidor").value;
+
+  if (!cpf) {
+    alert("⚠️ Por favor, selecione ou informe um Servidor/Corresponsável válido antes de salvar os contatos.");
+    return;
+  }
+
+  // Exibe o Loader visual do seu sistema
+  const loader = document.getElementById("loader");
+  if (loader) loader.style.display = "flex";
+
+  // Envia os dados coletados para o Google Apps Script
+  google.script.run
+    .withSuccessHandler(resultado => {
+      if (loader) loader.style.display = "none";
+      
+      alert(resultado.message);
+      
+      // Atualiza o cache interno de servidores se a sua aplicação possuir um (Ex: cacheServidores)
+      if (resultado.sucesso && typeof carregarServidores === "function") {
+        carregarServidores();
+      }
+    })
+    .withFailureHandler(erro => {
+      if (loader) loader.style.display = "none";
+      alert("❌ Erro de comunicação com o servidor: " + erro.message);
+    })
+    .atualizarContatoServidorGeral({
+      cpf: cpf,
+      nome: nome,
+      siape: siape,
+      email: email,
+      telefone: telefone
+    });
+}
+
+// ================= ITENS =================
+function adicionarItem() {
+
+  const container = document.getElementById("listaItens");
+  const ordem = container.children.length + 1;
+
+  const div = document.createElement("div");
+  div.className = "item-card";
+
+  div.innerHTML = `
+    <div class="item-header">
+      <div class="item-ordem">Item ${ordem}</div>
+      <button class="btn-remover">❌</button>
+    </div>
+
+    <div class="item-grid-1">
+      <div style="position:relative;">
+       <input class="cadmat-desc" placeholder="CADMAT - Descrição">
+       <div class="dropdown"></div>
+      </div>
+    </div>
+
+    <input class="info" placeholder="Informações complementares">
+
+    <div class="item-grid-2">
+      <select class="conta">${listaContasHTML}</select>
+      <input type="number" class="qtd" value="1" min="1">
+      <input class="valor" placeholder="Valor Unitário">
+      <input class="valor-total" readonly placeholder="Valor Total">
+      <button class="btn-remover">❌</button>
+    </div>
+  `;
+
+  container.appendChild(div);
+}
+
+// ================= EVENT DELEGATION =================
+document.addEventListener("input", function(e){
+
+  if (e.target.classList.contains("valor")) {
+    formatarCampoMoeda(e.target);
+    atualizarItem(e.target);
+  }
+
+  if (e.target.classList.contains("qtd")) {
+    atualizarItem(e.target);
+  }
+
+  if (e.target.classList.contains("cadmat-desc")) {
+    debounceCadmat(e.target);
+  }
+
+});
+
+document.addEventListener("click", function(e){
+
+  if (e.target.classList.contains("btn-remover")) {
+    e.target.closest(".item-card").remove();
+    reordenarItens();
+    atualizarResumo();
+  }
+
+  if (e.target.classList.contains("dropdown-item")) {
+
+    const el = e.target;
+
+    const codigo = el.dataset.codigo;
+    const material = el.dataset.material;
+    const conta = el.dataset.conta;
+
+    selecionarCadmat(el, codigo, material, conta);
+}
+
+});
+
+// MONITORA ESCOLHA DO TIPO
+document.addEventListener("change", function(e){
+
+if (e.target.name === "tipoMov") {
+
+  const bloco = document.getElementById("blocoProcesso");
+
+  if (e.target.value) {
+    bloco.classList.remove("hidden");
+  } else {
+    bloco.classList.add("hidden");
+  }
+
+  // 🔥 RESETA ETAPAS
+  document.getElementById("blocoBens").classList.add("hidden");
+  document.getElementById("ugDestino").value = "";
+  document.getElementById("uorgDestino").value = "";
+}
+
+});
+
+// ================= CADMAT (COM CACHE + DEBOUNCE) =================
+function debounceCadmat(input){
+
+  const key = input;
+  clearTimeout(debounceTimers[key]);
+
+  debounceTimers[key] = setTimeout(() => {
+    buscarCadmat(input);
+  }, 300);
+}
+
+function buscarCadmat(input){
+
+  const termo = input.value;
+
+  const dropdown = input.parentElement.querySelector(".dropdown");
+
+  if (!termo || termo.length < 2) {
+    dropdown.innerHTML = "";
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(lista => {
+      renderDropdown(dropdown, lista);
+    })
+    .buscarCadmatAutocomplete(termo);
+}
+
+function renderDropdown(dropdown, lista){
+  dropdown.innerHTML = lista.map(item => `
+    <div class="dropdown-item"
+      data-codigo="${item.codigo}"
+      data-material="${item.material}"
+      data-conta="${item.conta}">
+      <b>${item.codigo}</b> - ${item.material}
+    </div>
+  `).join("");
+}
+
+function selecionarCadmat(el, codigo, material, conta){
+
+  const card = el.closest(".item-card");
+
+  const campo = card.querySelector(".cadmat-desc");
+  campo.value = `${codigo} - ${material}`;
+
+  const select = card.querySelector(".conta");
+
+  if (![...select.options].some(o => o.value === conta)) {
+    select.innerHTML += `<option>${conta}</option>`;
+  }
+
+  select.value = conta;
+  select.disabled = true;
+
+  el.parentElement.innerHTML = "";
+}
+
+// ================= CÁLCULO =================
+function atualizarItem(el){
+
+  const card = el.closest(".item-card");
+
+  const qtd = Number(card.querySelector(".qtd").value || 0);
+  const valor = limparMoeda(card.querySelector(".valor").value);
+
+  const total = qtd * valor;
+
+  card.querySelector(".valor-total").value =
+    total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  atualizarResumo();
+}
+
+function atualizarResumo(){
+
+  let totalQtd = 0;
+  let totalValor = 0;
+
+  document.querySelectorAll(".item-card").forEach(card => {
+
+    totalQtd += Number(card.querySelector(".qtd").value || 0);
+    totalValor += limparMoeda(card.querySelector(".valor-total").value);
+
+  });
+
+  document.getElementById("quantidadeTotal").innerText = totalQtd;
+  document.getElementById("valorTotal").innerText =
+    totalValor.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+}
+
+function reordenarItens(){
+  document.querySelectorAll(".item-card").forEach((c,i)=>{
+    c.querySelector(".item-ordem").innerText = "Item " + (i+1);
+  });
+}
+
+// ================= MOEDA =================
+function formatarCampoMoeda(campo){
+  let v = campo.value.replace(/\D/g,"");
+  v = (Number(v)/100).toFixed(2);
+  v = v.replace(".",",");
+  v = v.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  campo.value = "R$ " + v;
+}
+
+function limparMoeda(v){
+  if (!v) return 0;
+  return Number(v.replace("R$","").replace(/\./g,"").replace(",","."));
+}
+
+// ================= SALVAR =================
+function salvar() {
+  const btn = document.getElementById("btnSalvar");
+  btn.disabled = true;
+
+  const notas = [];
+  const blocosNota = document.querySelectorAll(".nota-fiscal-bloco");
+  let erroMatematico = false;
+
+  blocosNota.forEach((bloco, idxNota) => {
+    const numeroNF = bloco.querySelector(".nf-numero").value;
+    const fornecedorNF = bloco.querySelector(".nf-fornecedor").value;
+    const valorFreteNF = limparMoeda(bloco.querySelector(".nf-frete").value) || 0;
+    const valorTotalNF = limparMoeda(bloco.querySelector(".nf-total").value) || 0;
+
+    const itensDaNota = [];
+    const cards = bloco.querySelectorAll(".item-card");
+    
+    // 1. Calcular total de unidades na nota para o rateio unitário
+    let totalUnidadesNaNota = 0;
+    cards.forEach(card => {
+      totalUnidadesNaNota += parseFloat(card.querySelector(".qtd").value) || 0;
+    });
+
+    const fretePorUnidade = totalUnidadesNaNota > 0 ? valorFreteNF / totalUnidadesNaNota : 0;
+    let somaValidacaoItens = 0;
+
+    // 2. Processar itens
+    cards.forEach((card, idxItem) => {
+      const qtd = parseFloat(card.querySelector(".qtd").value) || 0;
+      const valorUnitOriginal = limparMoeda(card.querySelector(".valor").value) || 0;
+      
+      if (qtd <= 0 || valorUnitOriginal <= 0) return;
+
+      const valorUnitComRateio = valorUnitOriginal + fretePorUnidade;
+      const totalItemComFrete = valorUnitComRateio * qtd;
+      somaValidacaoItens += totalItemComFrete;
+
+      const campoMaterial = card.querySelector(".cadmat-desc").value || "";
+      const [cadmat, ...descArr] = campoMaterial.split(" - ");
+      const descricao = descArr.join(" - ");
+
+      itensDaNota.push({
+        ordem: idxItem + 1,
+        cadmat: cadmat.trim(),
+        desc: descricao.trim(),
+        info: card.querySelector(".info").value,
+        marca: card.querySelector(".marca") ? card.querySelector(".marca").value : "", 
+        conta: card.querySelector(".conta").value,
+        qtd: qtd,
+        valorUnitarioRateado: valorUnitComRateio,
+        valorTotalItem: totalItemComFrete
+      });
+    });
+
+    // =========================================================================
+    // 🔥 BLOCO DE VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS
+    // =========================================================================
+    
+    // 🔹 1. Validação: Dados do Processo (Seção 1)
+    const tipo = document.getElementById("tipo").value.trim();
+    const processo = document.getElementById("processo").value.trim();
+    const data = document.getElementById("data").value.trim();
+    const ug = document.getElementById("ug").value.trim();       
+    const uorg = document.getElementById("uorg").value.trim();   
+
+    if (!tipo || !processo || !data || !ug || !uorg) {
+      alert("⚠️ [Seção 1 - Dados do Processo] Todos os campos são obrigatórios! Verifique se selecionou corretamente a UG e a UORG.");
+      btn.disabled = false;
+      return; 
+    }
+
+    // 🔹 2. Validação: Detalhes Específicos (Seção 2 - Condicional)
+    const blocoEmpenho = document.getElementById("blocoEmpenho");
+    if (blocoEmpenho && !blocoEmpenho.classList.contains("hidden")) {
+      const empenho = document.getElementById("empenho").value.trim();
+      const ugEmpenho = document.getElementById("ugEmpenho").value.trim(); 
+      if (!empenho || !ugEmpenho) {
+        alert("⚠️ [Seção 2 - Detalhes Específicos] Para este tipo de entrada, os campos 'Nº Empenho' e 'UG Empenho' são obrigatórios.");
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    const blocoEdital = document.getElementById("blocoEdital");
+    if (blocoEdital && !blocoEdital.classList.contains("hidden")) {
+      const edital = document.getElementById("edital").value.trim();
+      const beneficiario = document.getElementById("beneficiario").value.trim();
+      const cpf = document.getElementById("cpf").value.trim();
+      const siape = document.getElementById("siape").value.trim();
+      if (!edital || !beneficiario || !cpf || !siape) {
+        alert("⚠️ [Seção 2 - Detalhes Específicos] Todos os campos do bloco Edital/Beneficiário são obrigatórios.");
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    const blocoFade = document.getElementById("blocoFade");
+    if (blocoFade && !blocoFade.classList.contains("hidden")) {
+      const fade = document.getElementById("fade").value.trim();
+      if (!fade) {
+        alert("⚠️ [Seção 2 - Detalhes Específicos] O campo 'Projeto FADE' é obrigatório.");
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    // 🔹 3. Validação: Dados do Corresponsável (Seção 3)
+    const nomeServidor = document.getElementById("nomeServidor").value.trim();
+    const cpfServidor = document.getElementById("cpfServidor").value.trim();
+    const siapeServidor = document.getElementById("siapeServidor").value.trim();
+    const emailServidor = document.getElementById("emailServidor").value.trim();
+    const telefoneServidor = document.getElementById("telefoneServidor").value.trim();
+
+    if (!nomeServidor || !cpfServidor || !siapeServidor || !emailServidor || !telefoneServidor) {
+      alert("⚠️ [Seção 3 - Dados do Corresponsável] Todos os campos do corresponsável são obrigatórios (Nome, CPF, SIAPE, E-mail e Telefone).");
+      btn.disabled = false;
+      return;
+    }
+
+    // 🔹 4. Validação: Dados das Notas Fiscais e Itens (APENAS SE HOUVER BLOCOS DE NF)
+    const conteineresNF = document.querySelectorAll(".nota-fiscal-card, [id^='nf_']"); 
+    
+    // Se o usuário incluiu um card de nota na tela, nós validamos os campos dela
+    if (conteineresNF.length > 0) {
+      for (let i = 0; i < conteineresNF.length; i++) {
+        const nfCard = conteineresNF[i];
+        
+        const numDoc = nfCard.querySelector("[id^='numeroNota'], .input-num-doc");
+        const fornecedor = nfCard.querySelector("[id^='fornecedor'], .input-fornecedor");
+        const vlrTotalNf = nfCard.querySelector("[id^='valorTotalNota'], .input-vlr-total-nf");
+
+        if (!numDoc || !numDoc.value.trim() || !fornecedor || !fornecedor.value.trim() || !vlrTotalNf || !vlrTotalNf.value.trim()) {
+          alert(`⚠️ [Dados da Nota Fiscal] Verifique a Nota Fiscal nº ${i+1}. Os campos 'Nº Documento', 'Fornecedor' e 'Vlr. Total NF' são obrigatórios.`);
+          btn.disabled = false;
+          return;
+        }
+
+        const linhasItens = nfCard.querySelectorAll(".item-linha, [id^='item_']"); 
+        if (linhasItens.length === 0) {
+          alert(`⚠️ A Nota Fiscal nº ${i+1} não possui nenhum item cadastrado.`);
+          btn.disabled = false;
+          return;
+        }
+
+        for (let j = 0; j < linhasItens.length; j++) {
+          const itemLinha = linhasItens[j];
+          
+          const cadmat = itemLinha.querySelector("[id^='cadmat'], .input-cadmat");
+          const qtd = itemLinha.querySelector("[id^='qtd'], .input-qtd");
+          const vlrUnitario = itemLinha.querySelector("[id^='valorUnit'], .input-vlr-unitario");
+
+          if (!cadmat || !cadmat.value.trim() || !qtd || !qtd.value.trim() || !vlrUnitario || !vlrUnitario.value.trim()) {
+            alert(`⚠️ [Itens da NF] Na Nota Fiscal nº ${i+1}, o Item nº ${j+1} está incompleto. Os campos 'CADMAT', 'Qtd' e 'Vlr. Unitário' são obrigatórios.`);
+            btn.disabled = false;
+            return;
+          }
+          
+          if (parseFloat(qtd.value) <= 0 || parseFloat(vlrUnitario.value.replace(/[^\d,.-]/g, '').replace(',', '.')) <= 0) {
+            alert(`⚠️ [Itens da NF] Na Nota Fiscal nº ${i+1}, o Item nº ${j+1} possui quantidade ou valor unitário inválido (deve ser maior que zero).`);
+            btn.disabled = false;
+            return;
+          }
+        }
+      }
+    }
+
+    // 3. Verificação de integridade matemática
+    if (itensDaNota.length > 0) {
+      if (somaValidacaoItens.toFixed(2) !== valorTotalNF.toFixed(2)) {
+        abrirModal("Erro de Valor", 
+          `Na NF ${numeroNF || (idxNota + 1)}, a soma dos itens c/ frete (${somaValidacaoItens.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}) ` +
+          `não bate com o Valor Total informado (${valorTotalNF.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}).`
+        );
+        erroMatematico = true;
+      }
+
+      notas.push({
+        numero: numeroNF,
+        fornecedor: fornecedorNF,
+        valorFrete: valorFreteNF,
+        valorTotalNota: valorTotalNF,
+        itens: itensDaNota
+      });
+    }
+  });
+
+  if (erroMatematico) { btn.disabled = false; return; }
+
+  // 4. Montagem do Objeto Final
+  const dados = {
+    tipo: document.getElementById("tipo").value,
+    dataProcesso: document.getElementById("data").value,
+    processo: document.getElementById("processo").value,
+    ug: document.getElementById("ug").value,
+    uorg: document.getElementById("uorg").value,
+    empenho: document.getElementById("empenho").value,
+    ugEmpenho: document.getElementById("ugEmpenho").value,
+    edital: document.getElementById("edital").value,
+    beneficiario: document.getElementById("beneficiario").value,
+    cpf: document.getElementById("cpf").value,
+    siape: document.getElementById("siape").value,
+    fade: document.getElementById("fade").value, 
+    corresponsavel: document.getElementById("nomeServidor").value,
+    cpfCorresponsavel: document.getElementById("cpfServidor").value,
+    siapeCorresponsavel: document.getElementById("siapeServidor").value,
+    notas: notas 
+  };
+
+  // 🔴 A TRAVA DA NOTA OBRIGATÓRIA FOI REMOVIDA DAQUI! 🔴
+
+  mostrarLoader();
+  google.script.run
+    .withSuccessHandler(resp => {
+      esconderLoader();
+      btn.disabled = false;
+
+      if (resp.status === "ok") {
+        gerarPDFComprovante(dados, resp);
+        abrirModal("Sucesso", "Cadastro realizado com sucesso! O comprovante em PDF foi gerado.");
+        limparFormulario();
+      } else {
+        abrirModal("Erro", resp.message);
+      }
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      btn.disabled = false;
+      abrirModal("Erro", err.message);
+    })
+    .salvarDados(dados);
+}
+
+function calcularIntervaloTomboDinamico(inputInicial, qtd) {
+  const container = inputInicial.parentElement.parentElement;
+  const inputFinal = container.querySelector(".tombo-final");
+  const inputOcultoReal = container.querySelector(".input-tombos");
+  
+  let valorInicialStr = inputInicial.value.trim();
+  
+  if (!valorInicialStr) {
+    inputFinal.value = "";
+    inputOcultoReal.value = "";
+    return;
+  }
+  
+  // Captura apenas os números para fazer a matemática de soma
+  let apenasNumeros = valorInicialStr.replace(/\D/g, "");
+  if (!apenasNumeros) return;
+  
+  let numInicial = parseInt(apenasNumeros, 10);
+  let numFinal = numInicial + (qtd - 1);
+  
+  // Preserva o preenchimento de zeros originais (ex: SIADS usa 10 ou mais dígitos)
+  let tamanhoOriginal = valorInicialStr.length;
+  let valorFinalStr = String(numFinal).padStart(tamanhoOriginal, '0');
+  
+  inputFinal.value = valorFinalStr;
+  // Monta a string final exatamente como irá para a planilha
+  inputOcultoReal.value = `${valorInicialStr} a ${valorFinalStr}`;
+}
+
+
+// ================= RMB =================
+
+function gerarRelatorio() {
+
+  const mes = document.getElementById("mes").value;
+  const ano = document.getElementById("ano").value;
+
+  if (!mes || !ano) {
+    document.getElementById("resultadoRelatorio").innerHTML =
+      "<div class='alert error'>Informe mês e ano</div>";
+    return;
+  }
+
+  document.getElementById("resultadoRelatorio").innerHTML = "Gerando relatório...";
+
+  google.script.run
+    .withSuccessHandler(renderRelatorio)
+    .withFailureHandler(err => {
+      document.getElementById("resultadoRelatorio").innerHTML =
+        "<div class='alert error'>Erro: " + err.message + "</div>";
+    })
+    .gerarRelatorioMensalWeb(mes, ano);
+}
+
+function renderRelatorio(lista) {
+
+  const el = document.getElementById("resultadoRelatorio");
+
+  if (!lista || lista.length === 0) {
+    el.innerHTML = "<div class='alert error'>Nenhum dado encontrado</div>";
+    return;
+  }
+
+  let html = `
+    <table>
+      <tr>
+        <th>Tipo</th>
+        <th>Conta</th>
+        <th>TR</th>
+        <th>Data</th>
+        <th>Fornecedor</th>
+        <th>Valor</th>
+      </tr>
+  `;
+
+  lista.forEach(l => {
+    html += `
+      <tr>
+        <td>${l.tipo}</td>
+        <td>${l.conta}</td>
+        <td>${l.tr}</td>
+        <td>${l.data}</td>
+        <td>${l.fornecedor}</td>
+        <td>${l.valor.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</td>
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+
+  el.innerHTML = html;
+}
+
+function exportarExcel() {
+
+  const mes = document.getElementById("mes").value;
+  const ano = document.getElementById("ano").value;
+
+  if (!mes || !ano) {
+    document.getElementById("resultadoRelatorio").innerHTML =
+      "<div class='alert error'>Informe mês e ano</div>";
+    return;
+  }
+
+  document.getElementById("resultadoRelatorio").innerHTML = "Gerando Excel...";
+
+  google.script.run
+    .withSuccessHandler(url => {
+
+      document.getElementById("resultadoRelatorio").innerHTML =
+        "<div class='alert success'>Arquivo gerado. Baixando...</div>";
+
+      window.open(url, "_blank");
+    })
+    .withFailureHandler(err => {
+      document.getElementById("resultadoRelatorio").innerHTML =
+        "<div class='alert error'>Erro: " + err.message + "</div>";
+    })
+    .exportarRelatorioExcel(mes, ano);
+}
+
+
+// ================= PERFIS =================
+
+function aplicarPermissoes() {
+
+  google.script.run.withSuccessHandler(perfil => {
+
+    if (perfil !== "ADMIN") {
+      document.querySelector("button[onclick='exportarExcel()']").style.display = "none";
+    }
+
+  }).getPerfilUsuario();
+}
+
+// ================= LIMPAR FORMULARIO NA ENTRADA =================
+
+function limparFormulario() {
+
+  // 🔹 limpa inputs simples (text, date, hidden, etc.)
+  document.querySelectorAll("#abaCadastro input, #abaCadastro textarea").forEach(el => {
+    if (el.type !== "button") el.value = "";
+  });
+
+  // 🔹 limpa selects
+  document.querySelectorAll("#abaCadastro select").forEach(el => {
+    el.selectedIndex = 0;
+  });
+
+  // 🔥 AJUSTE ESPECÍFICO: Reseta e bloqueia os campos inteligentes de UG e UORG
+  const buscaUorg = document.getElementById("buscaUorg");
+  if (buscaUorg) {
+    buscaUorg.disabled = true;
+    buscaUorg.placeholder = "Selecione uma UG de registro primeiro...";
+  }
+  
+  // Garante a limpeza dos IDs ocultos enviados ao banco de dados
+  const hiddenUg = document.getElementById("ug");
+  if (hiddenUg) hiddenUg.value = "";
+  
+  const hiddenUorg = document.getElementById("uorg");
+  if (hiddenUorg) hiddenUorg.value = "";
+
+  // Limpa possíveis resíduos visuais das caixinhas de sugestão flutuantes
+  const resUg = document.getElementById("resultadoBuscaUg");
+  if (resUg) resUg.innerHTML = "";
+  
+  const resUorg = document.getElementById("resultadoBuscaUorg");
+  if (resUorg) resUorg.innerHTML = "";
+
+  // 🔹 limpa itens
+  document.getElementById("listaItens").innerHTML = "";
+
+  // 🔹 zera totais
+  document.getElementById("quantidadeTotal").innerText = "0";
+  document.getElementById("valorTotal").innerText = "R$ 0,00";
+
+  // 🔹 recria 1 item inicial
+  adicionarItem();
+
+  // 🔹 limpa mensagens
+  const retorno = document.getElementById("retorno");
+  if (retorno) retorno.innerHTML = "";
+
+  const buscaUgEmpenho = document.getElementById("buscaUgEmpenho");
+if (buscaUgEmpenho) buscaUgEmpenho.value = "";
+
+const hiddenUgEmpenho = document.getElementById("ugEmpenho");
+if (hiddenUgEmpenho) hiddenUgEmpenho.value = "";
+
+const resUgEmpenho = document.getElementById("resultadoBuscaUgEmpenho");
+if (resUgEmpenho) resUgEmpenho.innerHTML = "";
+
+// Adicione esta linha exatamente no fim da sua função limparFormulario():
+ajustarCamposCondicionais();
+
+}
+
+
+
+// ================= FUNÇÕES DO MODAL + LOADER =================
+
+function abrirModal(titulo, mensagem) {
+  const overlay = document.getElementById("modalOverlay");
+  const tituloEl = document.getElementById("modalTitulo");
+  const msgEl = document.getElementById("modalMensagem");
+
+  if (!overlay || !tituloEl || !msgEl) return;
+
+  tituloEl.innerText = titulo || "Aviso";
+  msgEl.innerText = mensagem || "";
+
+  // Remove a classe hidden para mostrar o modal
+  overlay.classList.remove("hidden");
+}
+
+function fecharModal() {
+  const overlay = document.getElementById("modalOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function mostrarLoader() {
+  const el = document.getElementById("loader");
+  if (el) el.style.display = "flex";
+}
+
+function esconderLoader() {
+  const el = document.getElementById("loader");
+  if (el) el.style.display = "none";
+}
+
+function validarFormulario(dados) {
+
+  // 🔹 básicos obrigatórios
+  if (!dados.data || !dados.tipo || !dados.processo || !dados.uorg || !dados.ug) {
+    abrirModal("Erro", "Preencha os campos obrigatórios: Data, Tipo, Processo, UORG e UG.");
+    return false;
+  }
+
+  const tipo = dados.tipo.toUpperCase();
+
+  // 🔹 EMPENHO
+  if (tipo.includes("EMPENHO")) {
+    if (!dados.empenho || !dados.ugEmpenho) {
+      abrirModal("Erro", "Para EMPENHO, informe Empenho e UG do Empenho.");
+      return false;
+    }
+  }
+
+  // 🔹 EDITAIS INTERNOS
+  if (tipo.includes("EDITAL")) {
+    if (!dados.empenho || !dados.ugEmpenho || !dados.beneficiario || !dados.cpf || !dados.siape) {
+      abrirModal("Erro", "Para EDITAIS, informe Empenho, UG Empenho, Beneficiário, CPF e SIAPE.");
+      return false;
+    }
+  }
+
+  // 🔹 FOMENTO
+  if (tipo.includes("CNPQ") || tipo.includes("FACEPE") || tipo.includes("FOMENTO")) {
+    if (!dados.beneficiario || !dados.cpf || !dados.siape) {
+      abrirModal("Erro", "Para órgãos de fomento, informe Beneficiário, CPF e SIAPE.");
+      return false;
+    }
+  }
+
+  // 🔹 FADE
+  if (tipo.includes("FADE")) {
+    if (!dados.fade) {
+      abrirModal("Erro", "Para FADE, informe o Projeto FADE.");
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getUsuarioLogado(email) {
+  return getUsuario(); // usa sua função Utils
+}
+
+// ================= GERAR TXT DE ENTRADA =================
+
+// ================= GERAR TXT DE ENTRADA =================
+
+function gerarTxt() {
+  const tr = document.getElementById("trTxt").value;
+
+  if (!tr) {
+    abrirModal("Aviso", "Por favor, informe o número do TR ou Processo.");
+    return;
+  }
+
+  // Feedback visual de início
+  const campoPreview = document.getElementById("resultadoTxt");
+  const status = document.getElementById("statusGeracao");
+  const badge = document.getElementById("badgeTipo");
+
+  campoPreview.value = "Gerando pré-visualização, por favor aguarde...";
+  status.innerHTML = "⏳ Processando dados do SIADS...";
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(txt => {
+      esconderLoader();
+      campoPreview.value = txt;
+      status.innerHTML = "✅ Dados carregados com sucesso!";
+      
+      // Estilização do Badge
+      badge.innerHTML = "PRONTO PARA EXPORTAÇÃO";
+      badge.style.background = "#d4edda";
+      badge.style.color = "#155724";
+
+      // Habilita os botões de download que estavam desativados
+      document.getElementById("btnDownloadTxt").disabled = false;
+      document.getElementById("btnDownloadMac").disabled = false;
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      campoPreview.value = "";
+      status.innerHTML = "❌ Falha na geração.";
+      abrirModal("Erro no Servidor", err.message);
+    })
+    .gerarTxtEntrada(tr);
+}
+
+// ================= DOWNLOAD DO TXT (Pré-visualizado) =================
+
+function baixarTxt() {
+  const conteudo = document.getElementById("resultadoTxt").value;
+  const tr = document.getElementById("trTxt").value;
+  
+  if (!conteudo || conteudo.startsWith("Gerando")) return;
+
+  const blob = new Blob([conteudo], { type: "text/plain" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `ENTRADA_SIADS_TR_${tr}.txt`;
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// ================= GERAR ARQUIVO MAC =================
+
+function baixarMAC() {
+  const tr = document.getElementById("trTxt").value;
+
+  if (!tr) {
+    abrirModal("Aviso", "Informe o TR para baixar o arquivo .MAC");
+    return;
+  }
+
+  mostrarLoader();
+  const status = document.getElementById("statusGeracao");
+  status.innerHTML = "⏳ Gerando arquivo binário .MAC...";
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      esconderLoader();
+      status.innerHTML = "✅ Download do .MAC iniciado.";
+
+      const link = document.createElement("a");
+      link.href = "data:" + resp.mime + ";base64," + resp.base64;
+      link.download = resp.nome;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      status.innerHTML = "❌ Erro ao baixar .MAC";
+      abrirModal("Erro", err.message);
+    })
+    .gerarArquivoMAC(tr);
+}
+
+
+
+/**
+ * Controla a exibição de campos com base no tipo de entrada selecionado
+ */
+/**
+ * Controla a exibição de campos com base no tipo de entrada selecionado
+ * Ajustado para "Editais Internos" exibir campos de Empenho e Fomento
+ */
+function ajustarCamposCondicionais() {
+  const tipoElemento = document.getElementById("tipo");
+  const secaoEspecifica = document.getElementById("secaoEspecifica");
+  const blocoEmpenho = document.getElementById("blocoEmpenho");
+  const blocoEdital = document.getElementById("blocoEdital");
+  const blocoFade = document.getElementById("blocoFade");
+
+  if (!tipoElemento) return;
+
+  const tipoSelecionado = tipoElemento.value.trim();
+
+  // 1. Definição das regras de exibição para cada bloco
+  // 🔹 Bloco Empenho: "Empenho" e "Edital Interno"
+  const mostrarEmpenho = (tipoSelecionado === "Empenho" || tipoSelecionado === "Edital Interno");
+
+  // 🔹 Bloco Edital: "Edital Interno", "CNPQ", "FACEPE" e "Outros Orgãos de Fomento"
+  const mostrarEdital = (
+    tipoSelecionado === "Edital Interno" || 
+    tipoSelecionado === "CNPQ" || 
+    tipoSelecionado === "FACEPE" || 
+    tipoSelecionado === "Outros Orgãos de Fomento"
+  );
+
+  // 🔹 Bloco FADE: apenas "FADE"
+  const mostrarFade = (tipoSelecionado === "FADE");
+
+  // 2. Aplicação das classes visuais (Alterna entre oculto e visível)
+  if (blocoEmpenho) {
+    if (mostrarEmpenho) {
+      blocoEmpenho.classList.remove("hidden");
+    } else {
+      blocoEmpenho.classList.add("hidden");
+      // Opcional: limpa os campos internos ao esconder para evitar lixo de dados
+      const inputEmpenho = document.getElementById("empenho");
+      const buscaUgEmpenho = document.getElementById("buscaUgEmpenho");
+      const hiddenUgEmpenho = document.getElementById("ugEmpenho");
+      if (inputEmpenho) inputEmpenho.value = "";
+      if (buscaUgEmpenho) buscaUgEmpenho.value = "";
+      if (hiddenUgEmpenho) hiddenUgEmpenho.value = "";
+    }
+  }
+
+  if (blocoEdital) {
+    if (mostrarEdital) {
+      blocoEdital.classList.remove("hidden");
+    } else {
+      blocoEdital.classList.add("hidden");
+      // Opcional: limpa os campos internos ao esconder
+      ["edital", "beneficiario", "cpf", "siape"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+    }
+  }
+
+  if (blocoFade) {
+    if (mostrarFade) {
+      blocoFade.classList.remove("hidden");
+    } else {
+      blocoFade.classList.add("hidden");
+      const inputFade = document.getElementById("fade");
+      if (inputFade) inputFade.value = "";
+    }
+  }
+
+  // 3. Controle do Card Geral Pai (Seção 2)
+  // Se pelo menos um dos blocos estiver ativo, mostra a seção. Caso contrário, oculta.
+  if (secaoEspecifica) {
+    if (mostrarEmpenho || mostrarEdital || mostrarFade) {
+      secaoEspecifica.classList.remove("hidden");
+    } else {
+      secaoEspecifica.classList.add("hidden");
+    }
+  }
+}
+
+/**
+ * Atualização da função de Adicionar Item para o novo layout
+ */
+function adicionarItem() {
+  const container = document.getElementById("listaItens");
+  const ordem = container.children.length + 1;
+  const div = document.createElement("div");
+  div.className = "item-card";
+
+  div.innerHTML = `
+    <div class="item-header">
+      <span class="item-ordem">ITEM ${ordem}</span>
+      <button onclick="this.closest('.item-card').remove(); reordenarItens(); atualizarResumo();" style="background:none; border:none; color:red; cursor:pointer;">✖ Excluir</button>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 2fr 1.5fr 1fr 1fr 1fr;">
+      <div style="position:relative;">
+        <label>Descrição (CADMAT)</label>
+        <input class="cadmat-desc" placeholder="Busque o material..." onkeyup="debounceCadmat(this)">
+        <div class="dropdown"></div>
+      </div>
+      <div>
+        <label>Informação Complementar</label>
+        <input class="info" placeholder="Marca, Modelo, Serial...">
+      </div>
+      <div>
+        <label>Conta Contábil</label>
+        <select class="conta">${listaContasHTML}</select>
+      </div>
+      <div>
+        <label>Qtd</label>
+        <input type="number" class="qtd" value="1" min="1" oninput="atualizarItem(this)">
+      </div>
+      <div>
+        <label>Vlr. Unitário</label>
+        <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); atualizarItem(this)">
+      </div>
+      <input type="hidden" class="valor-total">
+    </div>
+  `;
+
+  container.appendChild(div);
+  atualizarResumo();
+}
+
+/**
+ * Aplica máscara de Processo (000000/0000-00) em tempo real
+ */
+function mascaraProcesso(input) {
+  let valor = input.value.replace(/\D/g, ""); // Remove tudo que não é número
+  
+  if (valor.length > 6 && valor.length <= 10) {
+    valor = valor.replace(/^(\d{6})(\d)/, "$1/$2");
+  } else if (valor.length > 10) {
+    valor = valor.replace(/^(\d{6})(\d{4})(\d)/, "$1/$2-$3");
+  }
+  
+  input.value = valor;
+}
+
+/**
+ * Função auxiliar para limpar caracteres não numéricos antes de salvar
+ * (Caso você precise enviar apenas números para a planilha)
+ */
+function obterProcessoLimpo() {
+  const campo = document.getElementById("processo");
+  return campo ? campo.value.replace(/\D/g, "") : "";
+}
+
+let contadorNotas = 0;
+
+/**
+ * Adiciona um bloco de Nota Fiscal
+ */
+function adicionarNotaFiscal() {
+  contadorNotas++;
+  const container = document.getElementById("containerNotasFiscais");
+  
+  const divNota = document.createElement("div");
+  divNota.className = "card nota-fiscal-bloco";
+  divNota.id = `blocoNota_${contadorNotas}`;
+  
+  divNota.innerHTML = `
+    <div class="section-title" style="display: flex; justify-content: space-between; background: #e9ecef; color: #333;">
+      <span>📄 Dados da Nota Fiscal #${contadorNotas}</span>
+      <button onclick="removerNota(${contadorNotas})" style="color:red; background:none; border:none; cursor:pointer;">Excluir Nota</button>
+    </div>
+    
+    <div class="grid" style="grid-template-columns: 1.5fr 2.5fr 1fr 1fr; margin-bottom: 15px;">
+      <div><label>Nº Documento/NF</label><input class="nf-numero" placeholder="Ex: 123.456"></div>
+      <div><label>Fornecedor</label><input class="nf-fornecedor" placeholder="Razão Social"></div>
+      <div><label>Vlr. Frete</label><input class="nf-frete" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); atualizarResumoTotal()"></div>
+      <div><label>Vlr. Total NF</label><input class="nf-total" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this)"></div>
+    </div>
+
+    <div class="sub-itens-container" style="border-left: 4px solid #1F4E78; padding-left: 15px; margin-top: 10px;">
+      <div class="lista-itens-nota"></div>
+      <button onclick="adicionarItemNaNota(this)" class="btn-adicionar" style="font-size: 12px; padding: 5px 10px;">
+        + Adicionar Item à Nota ${contadorNotas}
+      </button>
+    </div>
+  `;
+  
+  container.appendChild(divNota);
+  // Adiciona automaticamente o primeiro item à nova nota
+  adicionarItemNaNota(divNota.querySelector('.btn-adicionar'));
+}
+
+/**
+ * Adiciona um item dentro de uma Nota Fiscal específica
+ */
+function adicionarItemNaNota(botao) {
+  const containerItens = botao.previousElementSibling;
+  const divItem = document.createElement("div");
+  divItem.className = "item-card item-linha-multipla";
+
+  divItem.innerHTML = `
+    <div class="linha-item">
+      <label>Descrição (CADMAT)</label>
+      <input class="cadmat-desc" placeholder="Busque o material..." onkeyup="debounceCadmat(this)">
+      <div class="dropdown"></div>
+    </div>
+
+    <div class="linha-item">
+      <label>Informação Complementar</label>
+      <input class="info" placeholder="Informações complementares do item">
+    </div>
+
+    <div class="linha-item">
+      <label>Marca</label>
+      <input class="marca" placeholder="Marca do fabricante">
+    </div>
+
+    <div class="linha-item" style="display: flex; gap: 10px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label>Conta Contábil</label>
+        <select class="conta">${listaContasHTML}</select>
+      </div>
+      <button onclick="this.closest('.item-card').remove(); recalcularRateioFrete();" style="color:red; border:none; background:none; cursor:pointer;">✖ Remover</button>
+    </div>
+
+    <div class="grid-qtd-valores" style="display: grid; grid-template-columns: 80px 1fr 1fr 1.2fr; gap: 10px; margin-top:10px;">
+      <div>
+        <label>Qtd</label>
+        <input type="number" class="qtd" value="1" min="1" oninput="recalcularRateioFrete()">
+      </div>
+      <div>
+        <label>Vlr. Unitário</label>
+        <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete()">
+      </div>
+      <div>
+        <label>Rateio Frete (Unit.)</label>
+        <div class="vlr-rateio badge-rateio" style="background:#f0f0f0; padding:8px; border-radius:4px; font-size:0.9rem;">R$ 0,00</div>
+      </div>
+      <div>
+        <label>Total Item (c/ Frete)</label>
+        <div class="valor-total-item" style="font-weight:bold; text-align:right; color:#1F4E78; background:#eef2f7; padding:8px; border-radius:4px;">R$ 0,00</div>
+      </div>
+    </div>
+  `;
+  containerItens.appendChild(divItem);
+  recalcularRateioFrete();
+}
+
+function recalcularRateioFrete() {
+  const blocosNota = document.querySelectorAll(".nota-fiscal-bloco");
+
+  blocosNota.forEach(bloco => {
+    const vlrFreteTotal = limparMoeda(bloco.querySelector(".nf-frete").value) || 0;
+    const itens = bloco.querySelectorAll(".item-card");
+    
+    // 1. Calcular a soma total de todas as unidades (Ex: 2 cadeiras + 1 mesa = 3)
+    let totalUnidadesNaNota = 0;
+    itens.forEach(card => {
+      totalUnidadesNaNota += parseFloat(card.querySelector(".qtd").value) || 0;
+    });
+
+    // 2. Calcular quanto de frete vai para CADA UNIDADE
+    const fretePorUnidade = (vlrFreteTotal > 0 && totalUnidadesNaNota > 0) 
+      ? vlrFreteTotal / totalUnidadesNaNota 
+      : 0;
+
+    // 3. Aplicar aos itens
+    itens.forEach(card => {
+      const qtdUnidades = parseFloat(card.querySelector(".qtd").value) || 0;
+      const vlrUnitario = limparMoeda(card.querySelector(".valor").value) || 0;
+      
+      // O rateio exibido é por unidade
+      card.querySelector(".vlr-rateio").innerText = fretePorUnidade.toLocaleString("pt-BR", {
+        style: "currency", currency: "BRL"
+      });
+
+      // Total do Item = (Valor Unitário + Frete da Unidade) * Quantidade de Unidades
+      const totalItemComFrete = (vlrUnitario + fretePorUnidade) * qtdUnidades;
+
+      card.querySelector(".valor-total-item").innerText = totalItemComFrete.toLocaleString("pt-BR", {
+        style: "currency", currency: "BRL"
+      });
+    });
+  });
+
+  atualizarResumoTotal();
+}
+
+/**
+ * Calcula o total do item individual e dispara a atualização global
+ */
+function calcularTotalItem(input) {
+  const card = input.closest(".item-card");
+  const qtd = parseFloat(card.querySelector(".qtd").value) || 0;
+  const valorUnit = limparMoeda(card.querySelector(".valor").value) || 0;
+  const total = qtd * valorUnit;
+
+  card.querySelector(".valor-total-item").innerText = total.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+  
+  atualizarResumoTotal(); // Atualiza os totais da página
+}
+
+/**
+ * Aplica os separadores enquanto o usuário digita
+ */
+function mascaraProcessoDinamica(input) {
+  let v = input.value.replace(/\D/g, ""); // Remove tudo que não é dígito
+
+  // Força o início com 23076 se o usuário começar a digitar
+  if (v.length > 0 && !v.startsWith("23076")) {
+    v = "23076" + v;
+  }
+
+  if (v.length <= 11) {
+    // 23076.XXXXXX
+    v = v.replace(/(\d{5})(\d{1,6})/, "$1.$2");
+  } else if (v.length <= 15) {
+    // 23076.XXXXXX/AAAA
+    v = v.replace(/(\d{5})(\d{6})(\d{1,4})/, "$1.$2/$3");
+  } else {
+    // 23076.XXXXXX/AAAA-XX
+    v = v.replace(/(\d{5})(\d{6})(\d{4})(\d{1,2})/, "$1.$2/$3-$4");
+  }
+  input.value = v;
+}
+
+/**
+ * Quando o usuário termina de digitar (sai do campo), 
+ * preenchemos os zeros à esquerda da segunda parte se necessário.
+ */
+function finalizarMascaraProcesso(input) {
+  let v = input.value.replace(/\D/g, "");
+  if (v.length < 5) return; // Campo muito curto
+
+  // Extrair as partes
+  let prefixo = "23076";
+  let corpo = v.substring(5, v.length - 6) || "";
+  let anoEDigitos = v.substring(v.length - 6); // Os últimos 6 dígitos (Ano + DV)
+
+  // Se o corpo (segunda parte) tiver menos de 6 dígitos, completa com zero à esquerda
+  corpo = corpo.padStart(6, '0');
+
+  // Se temos o ano e o DV (mínimo 6 dígitos no final: AAAA + XX)
+  if (v.length >= 11) {
+     let ano = anoEDigitos.substring(0, 4);
+     let dv = anoEDigitos.substring(4, 6);
+     input.value = `${prefixo}.${corpo}/${ano}-${dv}`;
+  }
+}
+
+/**
+ * Gera e baixa o PDF do comprovante de entrada
+ */
+function gerarPDFComprovante(dados, resp) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const azulUFPE = [31, 78, 120];
+
+  // --- CABEÇALHO ---
+  doc.setFontSize(18);
+  doc.setTextColor(azulUFPE[0], azulUFPE[1], azulUFPE[2]);
+  doc.text("Comprovante de Entrada de Bens", 105, 15, { align: "center" });
+
+  // --- SUBTÍTULO: SEQUENCIAL EM DESTAQUE ---
+  // Aqui pegamos o sequencial que o servidor retornou (ex: 2026000001)
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text(`REGISTRO Nº: ${resp.primeiroSequencial}`, 105, 23, { align: "center" });
+  
+  // Linha divisória
+  doc.setDrawColor(azulUFPE[0], azulUFPE[1], azulUFPE[2]);
+  doc.line(15, 28, 195, 28);
+
+  // --- SEÇÃO 1: DADOS DO PROCESSO ---
+  doc.setFontSize(11);
+  doc.setTextColor(0);
+  doc.text("1. DADOS DO PROCESSO", 15, 38);
+  
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  let y = 45;
+  const dadosProcesso = [
+    ["Processo:", dados.processo, "Data:", dados.dataProcesso],
+    ["Tipo Entrada:", dados.tipo, "UG Registro:", dados.ug],
+    ["UORG Solicitante:", dados.uorg, "", ""]
+  ];
+  
+  dadosProcesso.forEach(linha => {
+    doc.setFont("helvetica", "bold"); doc.text(linha[0], 15, y);
+    doc.setFont("helvetica", "normal"); doc.text(linha[1], 45, y);
+    doc.setFont("helvetica", "bold"); doc.text(linha[2], 110, y);
+    doc.setFont("helvetica", "normal"); doc.text(linha[3], 135, y);
+    y += 6;
+  });
+
+  // --- SEÇÃO 2: DETALHES ESPECÍFICOS ---
+  y += 4;
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(azulUFPE[0], azulUFPE[1], azulUFPE[2]);
+  doc.text("2. DETALHES ESPECÍFICOS", 15, y);
+  
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(0);
+  y += 7;
+
+  if (dados.empenho) {
+    doc.text(`Empenho: ${dados.empenho} | UG Empenho: ${dados.ugEmpenho}`, 15, y);
+    y += 6;
+  }
+  if (dados.edital) {
+    doc.text(`Edital: ${dados.edital} | Beneficiário: ${dados.beneficiario} (CPF: ${dados.cpf})`, 15, y);
+    y += 6;
+  }
+  if (dados.fade) {
+    doc.text(`TTP: ${dados.fade}`, 15, y);
+    y += 6;
+  }
+
+  // --- TABELA DE ITENS (REMOVIDO A COLUNA SEQUENCIAL) ---
+  // Agora a tabela foca apenas nos detalhes dos bens, já que o Sequencial é geral.
+  const colunas = ["Item", "NF", "Material / Marca / Informação", "Qtd", "Vlr. Unit (c/ Frete)", "Total"];
+  const linhas = [];
+
+  dados.notas.forEach(nota => {
+    nota.itens.forEach(item => {
+      linhas.push([
+        item.ordem, // Ex: 1, 2, 3...
+        nota.numero,
+        `${item.cadmat} - ${item.desc}\nMarca: ${item.marca}\nObs: ${item.info}`,
+        item.qtd,
+        item.valorUnitarioRateado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+        item.valorTotalItem.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      ]);
+    });
+  });
+
+  doc.autoTable({
+    startY: y + 5,
+    head: [colunas],
+    body: linhas,
+    headStyles: { fillColor: azulUFPE },
+    styles: { fontSize: 8 },
+    columnStyles: { 
+      0: { cellWidth: 12 }, // Item/Ordem
+      1: { cellWidth: 20 }, // NF
+      2: { cellWidth: 80 }  // Descrição grande
+    }
+  });
+
+  // --- RODAPÉ FINANCEIRO ---
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.text(`VALOR TOTAL GERAL: ${document.getElementById("valorTotal").innerText}`, 195, finalY, { align: "right" });
+
+  // Salva com o nome do Sequencial para facilitar a busca no PC
+  doc.save(`Comprovante_${resp.primeiroSequencial}.pdf`);
+}
+
+function atualizarResumoTotal() {
+  let qtdTotal = 0;
+  let valorGeral = 0;
+
+  // Percorre todos os itens dentro de todas as notas fiscais
+  const itens = document.querySelectorAll(".item-card");
+  
+  itens.forEach(card => {
+    const qtd = parseFloat(card.querySelector(".qtd").value) || 0;
+    const vlrUnitario = limparMoeda(card.querySelector(".valor").value) || 0;
+    
+    // Pegamos também o rateio do frete para o cálculo do Valor Geral
+    // O valor total do item já deve contemplar o frete rateado
+    const blocoNota = card.closest(".nota-fiscal-bloco");
+    const vlrFreteNF = limparMoeda(blocoNota.querySelector(".nf-frete").value) || 0;
+    const totalUnidadesNota = Array.from(blocoNota.querySelectorAll(".qtd"))
+                                   .reduce((acc, input) => acc + (parseFloat(input.value) || 0), 0);
+    
+    const fretePorUnidade = totalUnidadesNota > 0 ? vlrFreteNF / totalUnidadesNota : 0;
+    
+    qtdTotal += qtd;
+    valorGeral += (vlrUnitario + fretePorUnidade) * qtd;
+  });
+
+  // Atualiza os elementos na barra fixa inferior
+  document.getElementById("quantidadeTotal").innerText = qtdTotal;
+  document.getElementById("valorTotal").innerText = valorGeral.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function buscarItensParaTombamento() {
+  const input = document.getElementById("buscaSeqTombamento");
+  const seq = input.value.trim();
+
+  // Validação: precisa ter exatamente 10 dígitos
+  if (seq.length !== 10) {
+    abrirModal("Aviso", "O número Sequencial deve conter exatamente 10 dígitos (Ex: 2026000001).");
+    input.focus();
+    return;
+  }
+
+  mostrarLoader();
+  google.script.run
+    .withSuccessHandler(itens => {
+      esconderLoader();
+      renderizarItensTombamento(itens);
+    })
+    .getItensPorSequencial(seq);
+}
+
+function renderizarItensTombamento(itens) {
+  const container = document.getElementById("containerItensTombamento");
+  const footer = document.getElementById("footerTombamento");
+  if(!container || !footer) return;
+  container.innerHTML = "";
+
+  if (!itens || itens.length === 0) {
+    footer.classList.add("hidden");
+    container.innerHTML = "<div class='card' style='text-align:center;'>Nenhum item pendente encontrado para este Sequencial.</div>";
+    return;
+  }
+
+  // 1. Adicionado o parâmetro 'index' (0, 1, 2...)
+  itens.forEach((item, index) => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.style.marginBottom = "12px";
+    div.style.borderLeft = "5px solid #1F4E78";
+    
+    let valorNum = parseFloat(item.valorUnit);
+    if (isNaN(valorNum)) valorNum = 0;
+    const valorFormatado = valorNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const qtd = parseInt(item.qtd, 10) || 1;
+    let seletorTomboHTML = "";
+
+    // 2. Adicionado data-index="${index}" em ambos os fluxos
+    if (qtd > 1) {
+      seletorTomboHTML = `
+        <label style="display: block; font-size: 0.75rem; color: #666; margin-bottom: 4px; font-weight: bold; text-align: left;">Intervalo de Tombos (Qtd: ${qtd})</label>
+        <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+          <input type="text" class="tombo-inicial" placeholder="Inicial" oninput="calcularIntervaloTomboDinamico(this, ${qtd})" style="padding: 6px; width: 50%; border: 1px solid #ced4da; border-radius: 4px; font-weight: bold; text-align: center;">
+          <input type="text" class="tombo-final" placeholder="Final" readonly style="padding: 6px; width: 50%; border: 1px solid #e9ecef; border-radius: 4px; font-weight: bold; color: #495057; text-align: center; background-color: #f1f3f5;">
+        </div>
+        <input type="text" class="input-tombos" data-ordem="${item.ordem}" data-index="${index}" readonly style="padding: 4px; width: 100%; border: none; background: transparent; font-size: 0.85rem; color: #1F4E78; font-weight: bold; text-align: right; outline: none;">
+      `;
+    } else {
+      seletorTomboHTML = `
+        <label style="display: block; font-size: 0.75rem; color: #666; margin-bottom: 4px; font-weight: bold; text-align: left;">Número do Tombo</label>
+        <input type="text" class="input-tombos" data-ordem="${item.ordem}" data-index="${index}" placeholder="Digite o Tombo..." style="padding: 8px; width: 100%; border: 1px solid #ced4da; border-radius: 4px; font-weight: bold; text-align: left;">
+      `;
+    }
+
+    div.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap:15px; width: 100%;">
+        <div style="flex: 2; text-align: left;">
+          <div style="display: flex; gap: 10px; margin-bottom: 5px;">
+            <span style="background: #e9ecef; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: #495057;">NF: ${item.nota}</span>
+            <span style="background: #1F4E78; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; color: white;">CADMAT: ${item.cadmat}</span>
+          </div>
+          <div style="font-weight: bold; color: #333; margin-bottom: 4px;">Item ${item.ordem || (index + 1)} - ${item.descricao}</div>
+          <div style="font-size: 0.85rem; color: #666;">Quantidade: <b>${item.qtd}</b> | Unitário: <b>${valorFormatado}</b></div>
+        </div>
+        <div style="flex: 1; min-width: 180px; text-align: right;">
+          ${seletorTomboHTML}
+        </div>
+      </div>`;
+    container.appendChild(div);
+  });
+  footer.classList.remove("hidden");
+}
+
+function enviarTombamentos() {
+  const seqInput = document.getElementById("buscaSeqTombamento");
+  const seq = seqInput ? seqInput.value.trim() : "";
+  const inputs = document.querySelectorAll(".input-tombos");
+  const lista = [];
+
+  inputs.forEach((input, idxLoop) => {
+    const valor = input.value.trim();
+    const idxAttr = input.getAttribute("data-index");
+    
+    // Garante a posição (0, 1, 2) da caixa na tela
+    const posicao = (idxAttr !== null && idxAttr !== "") ? parseInt(idxAttr, 10) : idxLoop;
+
+    if (valor !== "") {
+      lista.push({ 
+        posicao: posicao,
+        valor: valor 
+      });
+    }
+  });
+
+  if (lista.length === 0) {
+    alert("Por favor, preencha pelo menos um número de tombamento.");
+    return;
+  }
+
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      esconderLoader();
+      alert(resp);
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      console.error(err);
+      alert("Erro ao salvar: " + err.message);
+    })
+    .salvarTombamentosNaPlanilha(seq, lista);
+}
+
+// Chamada da aba via menu/home
+// onclick="mostrarAba('relatorioEntrada')"
+
+function gerarRelatorioEntradaPDF() {
+  const input = document.getElementById("buscaSeqRelatorioEntrada");
+  const status = document.getElementById("statusRelatorioEntrada");
+  const seq = input.value.trim();
+
+  if (seq.length !== 10) {
+    alert("Por favor, informe o Sequencial completo com 10 dígitos.");
+    return;
+  }
+
+  status.innerHTML = "⏳ Localizando registro e preparando PDF...";
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(res => {
+      esconderLoader();
+      if (!res.sucesso) {
+        status.innerHTML = "❌ Registro não encontrado.";
+        alert("O sequencial " + seq + " não foi localizado na base de dados.");
+        return;
+      }
+      
+      status.innerHTML = "✅ PDF Gerado com sucesso!";
+      // Função que renderiza o PDF (pode reutilizar sua lógica de PDF existente)
+      construirPDFEntradaFinal(res.dados);
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      status.innerHTML = "⚠️ Erro ao processar solicitação.";
+      alert("Erro no servidor: " + err.message);
+    })
+    .getDadosRelatorioEntrada(seq);
+}
+
+function construirPDFEntradaFinal(dados) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const azulUFPE = [31, 78, 120];
+
+  // Cabeçalho e Título
+  doc.setFontSize(16);
+  doc.setTextColor(azulUFPE[0], azulUFPE[1], azulUFPE[2]);
+  doc.text("COMPROVANTE DE ENTRADA E TOMBAMENTO", 105, 15, { align: "center" });
+  
+  doc.setFontSize(12);
+  doc.text(`REGISTRO SEQUENCIAL: ${dados.sequencial}`, 105, 22, { align: "center" });
+
+  // Corpo do Relatório - DADOS DO PROCESSO
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  doc.setFont("helvetica", "bold");
+  doc.text("DADOS DO PROCESSO", 15, 34);
+  doc.setFont("helvetica", "normal");
+  // 🔥 Ajustado o texto de exibição da Data para Data de Registro
+  doc.text(`Processo: ${dados.processo} | Data Registro: ${dados.data} | Tipo: ${dados.tipo}`, 15, 39);
+  // 🔥 EXIBIÇÃO AVANÇADA DA UG E UORG COM DESCRIÇÕES:
+  const textoUg = dados.ugDescricao ? `${dados.ug} - ${dados.ugDescricao}` : dados.ug;
+  const textoUorg = dados.uorgDescricao ? `${dados.uorg} - ${dados.uorgDescricao}` : dados.uorg;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("UG Registro: ", 15, 49);
+  doc.setFont("helvetica", "normal");
+  doc.text(textoUg, 38, 49);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("UORG Solicitante: ", 15, 54);
+  doc.setFont("helvetica", "normal");
+  doc.text(textoUorg, 46, 54);
+  
+  let proximaLinhaY = 59;
+  
+  
+  // Bloco Condicional: DADOS DO CO-RESPONSÁVEL
+  if (dados.corresponsavel && dados.corresponsavel !== "") {
+    doc.setFont("helvetica", "bold");
+    doc.text("DADOS DO CO-RESPONSÁVEL", 15, proximaLinhaY + 4);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Nome: ${dados.corresponsavel}`, 15, proximaLinhaY + 9);
+    doc.text(`CPF: ${dados.cpfCorresponsavel} | SIAPE: ${dados.siapeCorresponsavel}`, 15, proximaLinhaY + 14);
+    doc.text(`E-mail: ${dados.emailCorresponsavel} | Telefone: ${dados.telefoneCorresponsavel}`, 15, proximaLinhaY + 19);
+    proximaLinhaY = proximaLinhaY + 24;
+  }
+  
+  doc.setDrawColor(azulUFPE[0], azulUFPE[1], azulUFPE[2]);
+  doc.line(15, proximaLinhaY, 195, proximaLinhaY);
+
+  // Tabela de Itens com Tombamento
+  const colunas = ["Item", "Especificação do Material", "Qtd", "Valor Unit.", "Tombamento/Patrimônio"];
+  const corpo = dados.itens.map(it => [
+    it.ordem,
+    `${it.cadmat} - ${it.descricao}`,
+    it.qtd,
+    it.valorUnit.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}),
+    it.tombamento || "Pendente"
+  ]);
+
+  doc.autoTable({
+    startY: proximaLinhaY + 5,
+    head: [colunas],
+    body: corpo,
+    headStyles: { fillColor: azulUFPE },
+    styles: { fontSize: 8 },
+    columnStyles: {
+      1: { cellWidth: 70 },
+      4: { cellWidth: 40, fontStyle: 'bold' }
+    }
+  });
+
+  doc.save(`Relatorio_Entrada_${dados.sequencial}.pdf`);
+}
+
+function preencherAnos() {
+  // IDs dos selects de cadastro (Recolhimento e Transferência)
+  const ids = ["procAno", "movProcAno"];
+  const anoAtual = new Date().getFullYear();
+  let html = "";
+
+  for (let i = anoAtual + 1; i >= 2019; i--) {
+    html += `<option value="${i}">${i}</option>`;
+  }
+
+  ids.forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.innerHTML = html;
+  });
+}
+
+function preencherAnosBusca() {
+  // IDs dos selects de busca (Recolhimento e Transferência)
+  const ids = ["procAnoBusca", "movBuscaAno"];
+  const anoAtual = new Date().getFullYear();
+  let html = "";
+
+  for (let i = anoAtual + 1; i >= 2019; i--) {
+    html += `<option value="${i}">${i}</option>`;
+  }
+
+  ids.forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.innerHTML = html;
+  });
+}
+
+
+
+</script>

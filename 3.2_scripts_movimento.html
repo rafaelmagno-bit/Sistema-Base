@@ -1,0 +1,2290 @@
+<script>
+
+function montarObjetoMovimentacao(){
+
+  const tipo = document.querySelector("input[name='tipoMov']:checked")?.value;
+
+  return {
+    sequencial: "", // depois você gera
+    tipoMovimentacao: tipo === "SEM_CARGA"
+      ? "TRANSFERENCIA SEM CARGA E DESCARGA"
+      : "TRANSFERENCIA COM CARGA E DESCARGA",
+
+    dataEnvioDBM: document.getElementById("movDataEnvio").value,
+    processo: document.getElementById("movProcesso").value,
+
+    quantidadeBens: 0,
+    ugOrigem: document.getElementById("movUgOrigem")?.value || "",
+    ugDestino: document.getElementById("movUgDestino")?.value || "",
+    uorgOrigem: document.getElementById("movUorgOrigem")?.value || "",
+    uorgDestino: document.getElementById("movUorgDestino")?.value || "",
+
+    // 🌟 NOVOS CAMPOS CAPTURADOS DO HTML (M, N, O, P, Q, R)
+    servidorRetirada: document.getElementById("movServidorRetirada")?.value || "",
+    telefoneRetirada: document.getElementById("movTelRetirada")?.value || "",
+    emailRetirada: document.getElementById("movEmailRetirada")?.value || "",
+    servidorEntrega: document.getElementById("movServidorEntrega")?.value || "",
+    telefoneEntrega: document.getElementById("movTelEntrega")?.value || "",
+    emailEntrega: document.getElementById("movEmailEntrega")?.value || "",
+
+    dataSiads: "",
+    conta: "",
+    valor: 0,
+
+    nlSaida: "",
+    nlRecebimento: "",
+
+    dataAtendimento: "",
+    concluido: "NÃO",
+    observacoes: ""
+  };
+}
+
+function buscarTombos(){
+
+  const texto = document.getElementById("loteTombos").value;
+
+  if (!texto) {
+    alert("Informe os tombos");
+    return;
+  }
+
+  document.getElementById("resultadoTombos").innerHTML = "Buscando...";
+
+  google.script.run
+    .withSuccessHandler(renderTombos)
+    .withFailureHandler(err => {
+      document.getElementById("resultadoTombos").innerHTML =
+        "<div class='alert error'>Erro: " + err.message + "</div>";
+    })
+    .buscarTombosLote(texto);
+}
+
+
+function renderTombos(bens) {
+  const container = document.getElementById("resultadoTombos");
+  container.innerHTML = "";
+
+  if (!bens || bens.length === 0) {
+    container.innerHTML = `<div class="alert alert-warning">Nenhum tombo válido retornado.</div>`;
+    return;
+  }
+
+  let tabela = `
+    <table class="tabela-bens">
+      <thead>
+        <tr>
+          <th>SIPAC</th>
+          <th>SIADS</th>
+          <th>Descrição</th>
+          <th>UORG Origem</th>
+          <th>UG Origem</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  bens.forEach(b => {
+    // 🌟 CORRIGIDO: Agora guarda a uorgPatrimonio real enviada pelo servidor dentro da lista global
+    const existe = listaMovimentacao.some(x => x.siads === b.siads || x.sipac === b.sipac);
+    if (!existe && b.siads !== "NÃO ENCONTRADO") {
+      listaMovimentacao.push({
+        sipac: b.sipac,
+        siads: b.siads,
+        descricao: b.descricao,
+        uorg: b.uorg,
+        ug: b.ug,
+        uorgPatrimonio: b.uorgPatrimonio // 🌟 LINHA CRÍTICA ADICIONADA
+      });
+    }
+
+    const classeLinha = b.siads === "NÃO ENCONTRADO" ? "linha-erro" : "";
+
+    tabela += `
+      <tr class="${classeLinha}">
+        <td>${b.sipac}</td>
+        <td><strong>${b.siads}</strong></td>
+        <td style="text-align:left;">${b.descricao}</td>
+        <td>${b.uorg || "-"}</td>
+        <td>${b.ug || "-"}</td>
+        <td>
+          ${b.siads !== "NÃO ENCONTRADO" 
+            ? `<button class="btn-action-del" onclick="removerBemLista('${b.siads}')"><i class="bi bi-trash"></i></button>`
+            : "-"
+          }
+        </td>
+      </tr>
+    `;
+  });
+
+  tabela += `</tbody></table>`;
+  container.innerHTML = tabela;
+
+  // Atualiza o resumo em tempo real
+  gerarResumoMovimentacao();
+}
+
+function adicionarTombos() {
+  const input = document.getElementById("loteTombosMov").value;
+  if (!input) {
+    alert("Informe pelo menos um número de tombo.");
+    return;
+  }
+
+  const listaInputs = input.split("\n").map(t => t.trim()).filter(t => t);
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(function(bensRetornados) {
+      esconderLoader();
+      if (!bensRetornados || bensRetornados.length === 0) {
+        alert("Nenhum tombo processado.");
+        return;
+      }
+
+      bensRetornados.forEach(b => {
+        if (b.descricao === "NÃO ENCONTRADO") {
+          alert(`Tombo ${b.siads || b.sipac || ""} não localizado na base TOMBOS.`);
+          return;
+        }
+
+        // Verifica duplicados na lista da tela
+        const jaExiste = listaMovimento.some(x => x.siads === b.siads || x.sipac === b.sipac);
+        if (!jaExiste) {
+          listaMovimento.push({
+            sipac: b.sipac,
+            siads: b.siads,
+            descricao: b.descricao,
+            uorg: b.uorg,
+            ug: b.ug,
+            uorgPatrimonio: b.uorgPatrimonio // 🌟 GARANTE A PROPRIEDADE AQUI
+          });
+        }
+      });
+
+      // Limpa o campo de texto após adicionar
+      document.getElementById("loteTombosMov").value = "";
+      
+      // Atualiza os componentes da tela
+      renderListaMovimento();
+      gerarResumoMovimentacao();
+    })
+    .withFailureHandler(function(err) {
+      esconderLoader();
+      alert("Erro ao buscar tombos: " + err.message);
+    })
+    .buscarTombosMovimento(listaInputs);
+}
+
+function renderListaMovimento() {
+
+  const container = document.getElementById("listaTombosRender");
+
+  if (listaMovimento.length === 0) {
+    container.innerHTML = "<div class='card'>Nenhum bem adicionado</div>";
+    return;
+  }
+
+  let html = `
+    <div class="card">
+
+      <table>
+        <tr>
+          <th>SIPAC</th>
+          <th>SIADS</th>
+          <th>Descrição</th>
+          <th>UG</th>
+          <th>UORG</th>
+          <th></th>
+        </tr>
+  `;
+
+  listaMovimento.forEach((item, i) => {
+    html += `
+      <tr>
+        <td>${item.sipac}</td>
+        <td>${item.siads}</td>
+        <td>${item.descricao}</td>
+        <td>${item.ug}</td>
+        <td>${item.uorg}</td>
+        <td>
+          <button onclick="removerItem(${i})">❌</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+    </table>
+
+    <div style="margin-top:15px; text-align:right;">
+      <button id="btnGerarResumo" onclick="gerarResumoRecolhimento()">Prosseguir</button>
+    </div>
+
+  </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+function removerItem(index) {
+  listaMovimento.splice(index, 1);
+  renderListaMovimento();
+}
+
+function validarDestino() {
+
+  const ug = document.getElementById("ugDestino").value;
+  const uorg = document.getElementById("uorgDestino").value;
+
+  if (!ug || !uorg) {
+    alert("Preencha UG e UORG de destino antes de prosseguir.");
+    return;
+  }
+
+  document.getElementById("blocoBens").classList.remove("hidden");
+
+}
+
+let gruposGerados = [];
+
+// 🌟 COPIE E SUBSTITUA ESTA FUNÇÃO INTEGRALMENTE NO SEU ARQUIVO 3.2_scripts_movimento.txt
+function gerarResumoMovimentacao() {
+  const resumoDiv = document.getElementById("resumoMovimentacao");
+  if (!listaMovimentacao || listaMovimentacao.length === 0) {
+    resumoDiv.innerHTML = "";
+    resumoDiv.classList.add("hidden");
+    return;
+  }
+
+  const dadosProc = window.dadosProcessoAtivo || {};
+
+  const grupos = {};
+  listaMovimentacao.forEach(item => {
+    const chave = `${item.ug}_${item.uorg}_${dadosProc.ugDestino || ''}_${dadosProc.uorgDestino || ''}`;
+    if (!grupos[chave]) {
+      const classeSiads = (String(item.ug).trim() === String(dadosProc.ugDestino || '').trim())
+        ? "TROCA DE RESPONSABILIDADE"
+        : "TRANSFERENCIA ENTRE UG'S";
+
+      grupos[chave] = {
+        ugOrigem: item.ug,
+        uorgOrigem: item.uorg,
+        // 🌟 CORREÇÃO CRÍTICA: Agora lê a propriedade uorgPatrimonio vinda do bem (Coluna G)
+        uorgPatrimonio: item.uorgPatrimonio || "Não cadastrada",
+        ugDestino: dadosProc.ugDestino || '',
+        uorgDestino: dadosProc.uorgDestino || '',
+        tipoSiads: classeSiads,
+        tombos: [],
+        qtd: 0
+      };
+    }
+    grupos[chave].tombos.push(item.siads);
+    grupos[chave].qtd++;
+  });
+
+  let html = `
+    <div class="card" style="margin-top:20px; border-top: 5px solid #17a2b8;">
+      <h3 style="color: #1F4E78; margin-bottom: 15px;">📋 Resumo Agrupado (Classificação SIADS)</h3>
+      <div style="overflow-x: auto;">
+        <table class="tabela-resumo" style="width:100%; border-collapse: collapse; font-size: 11px; text-align: center;">
+          <thead>
+            <tr style="background: #f2f2f2;">
+              <th style="border: 1px solid #ddd; padding: 8px;">GRUPO</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">UG ORIGEM</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">UORG ORIGEM</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">UORG PATRIMÔNIO</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">UG DESTINO</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">UORG DESTINO</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">QTD BENS</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">TOMBOS (SIADS)</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">TIPO MOVIMENTAÇÃO SIADS</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+  let contador = 1;
+  for (let chave in grupos) {
+    const g = grupos[chave];
+    html += `
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">${contador++}</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${g.ugOrigem}</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${g.uorgOrigem}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #28a745;">${g.uorgPatrimonio}</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${g.ugDestino}</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">${g.uorgDestino}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${g.qtd}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; max-width: 250px; word-wrap: break-word;">${g.tombos.join("; ")}</td>
+        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #1F4E78;">${g.tipoSiads}</td>
+      </tr>`;
+  }
+
+  html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button onclick="limparTelaMovimentacao()" style="background-color: #6c757d;">🧹 Limpar Tudo</button>
+        <button onclick="finalizarMovimentacao()" style="background-color: #28a745;">💾 Confirmar e Finalizar</button>
+      </div>
+    </div>`;
+
+  resumoDiv.innerHTML = html;
+  resumoDiv.classList.remove("hidden");
+  resumoDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderResumoMovimento(lista) {
+
+  const container = document.getElementById("resumoMovimento");
+
+  let html = `
+    <div class="section-title">Resumo da Movimentação</div>
+
+    <div class="card">
+      <table>
+        <tr>
+          <th>GRUPO</th>
+          <th>SEQ. DOC</th>
+          <th>UG ORIGEM</th>
+          <th>UORG ORIGEM</th>
+          <th>QTD TOMBOS</th>
+          <th>UG DESTINO</th>
+          <th>UORG DESTINO</th>
+          <th>TIPO</th>
+        </tr>
+  `;
+
+  lista.forEach(g => {
+    html += `
+      <tr>
+        <td>${g.grupo}</td>
+        <td>${g.sequencial || "-"}</td>
+        <td>${g.ugOrigem}</td>
+        <td>${g.uorgOrigem}</td>
+        <td>${g.quantidade}</td>
+        <td>${g.ugDestino}</td>
+        <td>${g.uorgDestino}</td>
+        <td>${g.tipoMov}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+  container.classList.remove("hidden");
+
+}
+
+function salvarMovimentoFinal() {
+
+  if (!gruposGerados || gruposGerados.length === 0) {
+    alert("Nenhum grupo para salvar.");
+    return;
+  }
+
+ const tipo = document.querySelector("input[name='tipoMov']:checked")?.value;
+
+const dados = {
+  processo: document.getElementById("movProcesso").value,
+  dataEnvioDBM: document.getElementById("movDataEnvio").value,
+  tipoMovimentacao: tipo === "SEM_CARGA"
+    ? "TRANSFERÊNCIA SEM CARGA E DESCARGA"
+    : "TRANSFERÊNCIA COM CARGA E DESCARGA",
+  grupos: gruposGerados,
+  bens: listaMovimento
+};
+
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(resp => {
+
+    esconderLoader();
+
+   alert(`Salvo com sucesso!\nSequencial base: ${resp.sequencialBase}`);
+
+   // 🔥 DOWNLOAD AUTOMÁTICO DO PDF
+   // 🔥 CONVERTE BASE64 → BLOB (forma correta)
+const byteCharacters = atob(resp.pdf);
+const byteNumbers = new Array(byteCharacters.length);
+
+for (let i = 0; i < byteCharacters.length; i++) {
+  byteNumbers[i] = byteCharacters.charCodeAt(i);
+}
+
+const byteArray = new Uint8Array(byteNumbers);
+const blob = new Blob([byteArray], { type: "application/pdf" });
+
+// 🔥 CRIA URL TEMPORÁRIA
+const url = URL.createObjectURL(blob);
+
+// 🔥 DISPARA DOWNLOAD
+const link = document.createElement("a");
+link.href = url;
+link.download = `Movimentacao_${resp.sequencialBase}.pdf`;
+
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+
+// 🔥 LIMPA MEMÓRIA
+URL.revokeObjectURL(url);
+
+    // reset
+    gruposGerados = [];
+    listaMovimento = [];
+
+    document.getElementById("resumoMovimento").innerHTML = "";
+    document.getElementById("resumoMovimento").classList.add("hidden");
+
+    renderListaMovimento();
+
+  })
+    .withFailureHandler(err => {
+      esconderLoader();
+      alert("Erro: " + err.message);
+    })
+    .salvarMovimento(dados);
+
+}
+
+// ================= CONTROLE VISUAL DO BLOCO DE ORIGEM =================
+function atualizarExibicaoBlocoOrigem() {
+  const tipoTransf = document.getElementById("movTipoTransf").value;
+  const blocoOrigem = document.getElementById("blocoOrigemTransferencia");
+  const blocoUpload = document.getElementById("blocoUploadMovimentacao"); // Novo
+  
+  // Controle do bloco Origem (já existente)
+  if (blocoOrigem) {
+    if (tipoTransf === "Transferência") {
+      blocoOrigem.classList.remove("hidden");
+    } else {
+      blocoOrigem.classList.add("hidden");
+      document.getElementById("buscaMovUgOrigem").value = "";
+      document.getElementById("movUgOrigem").value = "";
+      document.getElementById("buscaMovUorgOrigem").value = "";
+      document.getElementById("buscaMovUorgOrigem").disabled = true;
+      document.getElementById("movUorgOrigem").value = "";
+    }
+  }
+
+  // 🔥 Controle do novo bloco de Upload
+  if (blocoUpload) {
+    if (tipoTransf === "Movimentação Interna") {
+      blocoUpload.classList.remove("hidden");
+    } else {
+      blocoUpload.classList.add("hidden");
+      document.getElementById("arquivoSolicitacao").value = ""; // Reseta o arquivo se mudar de tipo
+    }
+  }
+}
+
+// ================= BUSCA DINÂMICA: UG ORIGEM MOVIMENTAÇÃO =================
+function buscarMovUgOrigemDinamico(valor) {
+  const container = document.getElementById("resBuscaMovUgOrigem");
+  const inputReal = document.getElementById("movUgOrigem");
+  const inputUorg = document.getElementById("buscaMovUorgOrigem");
+  
+  container.innerHTML = "";
+  if (!valor || valor.trim().length < 2) return;
+  const termo = valor.toLowerCase().trim();
+
+  // Filtra utilizando o cache de UGs global que você já possui carregado
+  const filtrados = cacheUGs.filter(item => 
+    item.ug.toLowerCase().includes(termo) ||
+    item.descricao.toLowerCase().includes(termo) ||
+    item.sigla.toLowerCase().includes(termo)
+  );
+
+  if (filtrados.length === 0) {
+    container.innerHTML = "<div style='padding:8px; font-size:0.85rem; color:#856404; background:#fff3cd;'>Nenhuma UG localizada.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const div = document.createElement("div");
+    div.style = "padding:8px 12px; cursor:pointer; border-bottom:1px solid #e9ecef; background:#fff;";
+    div.innerHTML = `<div style="font-weight:bold; color:#1F4E78; font-size:0.9rem;">${item.ug} - ${item.sigla}</div>
+                     <div style="font-size:0.75rem; color:#6c757d;">${item.descricao}</div>`;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("buscaMovUgOrigem").value = `${item.ug} - ${item.sigla}`;
+      inputReal.value = item.ug;
+      container.innerHTML = "";
+      
+      // Libera o input de UORG associado
+      if (inputUorg) {
+        inputUorg.disabled = false;
+        inputUorg.placeholder = "Digite a UORG de origem...";
+        inputUorg.value = "";
+        document.getElementById("movUorgOrigem").value = "";
+      }
+    });
+    div.addEventListener("mouseenter", () => div.style.backgroundColor = "#f8f9fa");
+    div.addEventListener("mouseleave", () => div.style.backgroundColor = "#fff");
+    container.appendChild(div);
+  });
+}
+
+// ================= BUSCA DINÂMICA: UORG ORIGEM MOVIMENTAÇÃO =================
+// ================= BUSCA DINÂMICA: UORG ORIGEM MOVIMENTAÇÃO (CORRIGIDO) =================
+function buscarMovUorgOrigemDinamico(valor) {
+  const container = document.getElementById("resBuscaMovUorgOrigem");
+  const inputReal = document.getElementById("movUorgOrigem");
+  const ugSelecionada = document.getElementById("movUgOrigem").value;
+
+  if (!container) return;
+  container.innerHTML = "";
+  
+  // Garante que existe uma UG selecionada antes de prosseguir
+  if (!ugSelecionada) return;
+  if (!valor || valor.trim().length < 2) return;
+  
+  const termo = valor.toLowerCase().trim();
+  
+  // Normaliza o código da UG (remove espaços) para uma comparação idêntica e segura
+  const ugBuscaLimpa = String(ugSelecionada).trim();
+
+  // Filtra utilizando o cache do Organograma global
+  const filtrados = cacheOrganograma.filter(item => {
+    // 🔹 Ajustado para ler a propriedade correta do objeto (normalmente 'ug' ou mapeado por coluna)
+    // Se o seu cache usa 'ug', 'ugOrg' ou 'codigoUg', normalizamos a checagem:
+    const ugDoItem = String(item.ug || item.ugOrg || "").trim();
+    
+    return ugDoItem === ugBuscaLimpa && (
+      item.uorg.toLowerCase().includes(termo) ||
+      item.descricao.toLowerCase().includes(termo)
+    );
+  });
+
+  if (filtrados.length === 0) {
+    container.innerHTML = "<div style='padding:8px; font-size:0.85rem; color:#856404; background:#fff3cd;'>Nenhuma UORG localizada para esta UG.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const div = document.createElement("div");
+    div.style = "padding:8px 12px; cursor:pointer; border-bottom:1px solid #e9ecef; background:#fff;";
+    div.innerHTML = `
+      <div style="font-weight:bold; color:#1F4E78; font-size:0.9rem;">${item.uorg}</div>
+      <div style="font-size:0.75rem; color:#6c757d; margin-top:2px;">${item.descricao}</div>
+    `;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("buscaMovUorgOrigem").value = `${item.uorg} - ${item.descricao}`;
+      if (inputReal) inputReal.value = item.uorg; // Grava o código limpo no input hidden
+      container.innerHTML = "";
+    });
+    
+    div.addEventListener("mouseenter", () => div.style.backgroundColor = "#f8f9fa");
+    div.addEventListener("mouseleave", () => div.style.backgroundColor = "#fff");
+    container.appendChild(div);
+  });
+}
+
+// ================= BUSCA DINÂMICA: UG DESTINO MOVIMENTAÇÃO =================
+function buscarMovUgDestinoDinamico(valor) {
+  const container = document.getElementById("resBuscaMovUgDestino");
+  const inputReal = document.getElementById("movUgDestino");
+  const inputUorg = document.getElementById("buscaMovUorgDestino");
+  
+  if (!container) return;
+  container.innerHTML = "";
+  
+  if (!valor || valor.trim().length < 2) return;
+  const termo = valor.toLowerCase().trim();
+
+  // Filtra utilizando o cache de UGs global
+  const filtrados = cacheUGs.filter(item => 
+    item.ug.toLowerCase().includes(termo) ||
+    item.descricao.toLowerCase().includes(termo) ||
+    item.sigla.toLowerCase().includes(termo)
+  );
+
+  if (filtrados.length === 0) {
+    container.innerHTML = "<div style='padding:8px; font-size:0.85rem; color:#856404; background:#fff3cd;'>Nenhuma UG localizada.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const div = document.createElement("div");
+    div.style = "padding:8px 12px; cursor:pointer; border-bottom:1px solid #e9ecef; background:#fff;";
+    div.innerHTML = `<div style="font-weight:bold; color:#1F4E78; font-size:0.9rem;">${item.ug} - ${item.sigla}</div>
+                     <div style="font-size:0.75rem; color:#6c757d; margin-top:2px;">${item.descricao}</div>`;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("buscaMovUgDestino").value = `${item.ug} - ${item.sigla}`;
+      if (inputReal) inputReal.value = item.ug; // Alimenta o hidden com o código puro da UG
+      container.innerHTML = "";
+      
+      // Libera e limpa o input de UORG de Destino associado
+      if (inputUorg) {
+        inputUorg.disabled = false;
+        inputUorg.placeholder = "Digite a UORG de destino...";
+        inputUorg.value = "";
+        document.getElementById("movUorgDestino").value = "";
+      }
+    });
+    
+    div.addEventListener("mouseenter", () => div.style.backgroundColor = "#f8f9fa");
+    div.addEventListener("mouseleave", () => div.style.backgroundColor = "#fff");
+    container.appendChild(div);
+  });
+}
+
+// ================= BUSCA DINÂMICA: UORG DESTINO MOVIMENTAÇÃO =================
+function buscarMovUorgDestinoDinamico(valor) {
+  const container = document.getElementById("resBuscaMovUorgDestino");
+  const inputReal = document.getElementById("movUorgDestino");
+  const ugSelecionada = document.getElementById("movUgDestino").value;
+
+  if (!container) return;
+  container.innerHTML = "";
+  
+  if (!ugSelecionada) return;
+  if (!valor || valor.trim().length < 2) return;
+  
+  const termo = valor.toLowerCase().trim();
+  const ugBuscaLimpa = String(ugSelecionada).trim();
+
+  // Filtra utilizando o cache do Organograma global cruzando com a UG Destino selecionada
+  const filtrados = cacheOrganograma.filter(item => {
+    const ugDoItem = String(item.ug || item.ugOrg || "").trim();
+    return ugDoItem === ugBuscaLimpa && (
+      item.uorg.toLowerCase().includes(termo) ||
+      item.descricao.toLowerCase().includes(termo)
+    );
+  });
+
+  if (filtrados.length === 0) {
+    container.innerHTML = "<div style='padding:8px; font-size:0.85rem; color:#856404; background:#fff3cd;'>Nenhuma UORG localizada para esta UG.</div>";
+    return;
+  }
+
+  filtrados.slice(0, 8).forEach(item => {
+    const div = document.createElement("div");
+    div.style = "padding:8px 12px; cursor:pointer; border-bottom:1px solid #e9ecef; background:#fff;";
+    div.innerHTML = `
+      <div style="font-weight:bold; color:#1F4E78; font-size:0.9rem;">${item.uorg}</div>
+      <div style="font-size:0.75rem; color:#6c757d; margin-top:2px;">${item.descricao}</div>
+    `;
+    
+    div.addEventListener("click", () => {
+      document.getElementById("buscaMovUorgDestino").value = `${item.uorg} - ${item.descricao}`;
+      if (inputReal) inputReal.value = item.uorg; // Grava o código puro da UORG no hidden
+      container.innerHTML = "";
+    });
+    
+    div.addEventListener("mouseenter", () => div.style.backgroundColor = "#f8f9fa");
+    div.addEventListener("mouseleave", () => div.style.backgroundColor = "#fff");
+    container.appendChild(div);
+  });
+}
+
+
+
+function alternarTabRecolhimento(event, nomeAba) {
+  // 1. Esconde todos os conteúdos das sub-abas dentro da aba Recolhimento
+  document.querySelectorAll('#abaRecolhimento .tab-content').forEach(aba => {
+    aba.classList.add('hidden');
+  });
+
+  // 2. Remove a classe 'active' de todos os botões (links) de aba
+  document.querySelectorAll('#abaRecolhimento .tab-link').forEach(link => {
+    link.classList.remove('active');
+  });
+
+  // 3. Mostra a aba correspondente ao parâmetro enviado
+  if (nomeAba === 'processo') {
+    document.getElementById('subAbaProcesso').classList.remove('hidden');
+  } 
+  else if (nomeAba === 'tombos') {
+    document.getElementById('subAbaTombos').classList.remove('hidden');
+  } 
+  else if (nomeAba === 'mac') {
+    document.getElementById('subAbaMac').classList.remove('hidden');
+  }
+
+  // 4. Adiciona a classe 'active' ao botão que disparou o evento
+  if (event && event.currentTarget) {
+    event.currentTarget.classList.add('active');
+  }
+}
+
+function salvarProcessoRecolhimento() {
+  // 1. Referência do botão para desativar (evita duplo clique)
+  const btn = event.target; 
+  const fileInput = document.getElementById("recArquivo");
+  const file = fileInput.files[0];
+
+  // Validação básica antes de começar
+  if (!file) {
+    abrirModal("Atenção", "Por favor, anexe o arquivo da solicitação.");
+    return;
+  }
+
+  // 2. Inicia o feedback visual
+  mostrarLoader();
+  if(btn && btn.tagName === "BUTTON") btn.disabled = true;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const base64 = e.target.result.split(",")[1];
+      const processo = montarProcesso(); // Presume-se que valida os campos de texto do processo
+
+      if (!processo) {
+        esconderLoader();
+        if(btn) btn.disabled = false;
+        return; // montarProcesso deve exibir seu próprio alerta se faltar algo
+      }
+
+      const dados = {
+        processo: processo,
+        dataProcesso: document.getElementById("recData").value,
+        ug: document.getElementById("ugRecolhimento").value,
+        departamento: document.getElementById("recDepartamento").value,
+        quantidade: document.getElementById("recQtd").value
+      };
+
+      // 3. Chamada ao servidor (Google Apps Script)
+      google.script.run
+        .withSuccessHandler((resp) => {
+          // 4. Finalização com sucesso
+          esconderLoader();
+          if(btn) btn.disabled = false;
+          
+          abrirModal("Sucesso", "Processo de recolhimento salvo com sucesso!");
+          
+          // Opcional: Limpar campos após sucesso
+          document.getElementById("recArquivo").value = "";
+          document.getElementById("recQtd").value = "";
+          // Adicione aqui outras limpezas se desejar
+        })
+        .withFailureHandler(err => {
+          // 5. Tratamento de erro (Crítico esconder o loader aqui!)
+          esconderLoader();
+          if(btn) btn.disabled = false;
+          
+          console.error(err);
+          abrirModal("Erro no Servidor", "Não foi possível salvar:\n" + err.message);
+        })
+        .salvarProcessoRecolhimento(dados, {
+          base64,
+          nome: file.name,
+          mimeType: file.type
+        });
+
+    } catch (error) {
+      esconderLoader();
+      if(btn) btn.disabled = false;
+      abrirModal("Erro", "Erro ao processar arquivo: " + error.message);
+    }
+  };
+
+  reader.onerror = function() {
+    esconderLoader();
+    if(btn) btn.disabled = false;
+    abrirModal("Erro", "Erro na leitura do arquivo.");
+  };
+
+  reader.readAsDataURL(file);
+}
+
+function buscarProcessoRecolhimentoFront() {
+  // 1. Identifica o botão e inicia o feedback
+  const btn = event.target;
+  let processo = montarProcessoBusca();
+
+  // Sanitização
+  processo = processo.trim();
+
+  // Validação simples antes de chamar o servidor
+  if (!processo || processo.length < 5) {
+    abrirModal("Atenção", "Por favor, informe o número do processo corretamente.");
+    return;
+  }
+
+  // 2. Bloqueia a tela e o botão
+  mostrarLoader();
+  if (btn && btn.tagName === "BUTTON") btn.disabled = true;
+
+  console.log("BUSCANDO PROCESSO:", "[" + processo + "]");
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      // 3. Libera a tela
+      esconderLoader();
+      if (btn) btn.disabled = false;
+
+      console.log("RESPOSTA:", res);
+
+      if (!res) {
+        abrirModal("Não Encontrado", "O processo informado não foi localizado na base de dados.");
+        // Oculta os blocos caso tenham sido abertos em uma busca anterior
+        document.getElementById("blocoDataColeta").classList.add("hidden");
+        document.getElementById("blocoTombosRec").classList.add("hidden");
+        return;
+      }
+
+      // Preenche os dados do resultado
+      document.getElementById("dadosProcessoRec").innerHTML = `
+        <div class="card" style="background-color: #e9ecef; border-left: 5px solid #1F4E78;">
+          <b>UG:</b> ${res.ug || "-"} <br>
+          <b>Departamento:</b> ${res.departamento || "-"} <br>
+          <b>Quantidade prevista:</b> ${res.qtd || 0}
+        </div>
+      `;
+
+      // Revela as próximas etapas do fluxo
+      document.getElementById("blocoDataColeta").classList.remove("hidden");
+      document.getElementById("blocoTombosRec").classList.remove("hidden");
+    })
+    .withFailureHandler(function(err) {
+      // 4. Libera a tela mesmo em caso de erro fatal
+      esconderLoader();
+      if (btn) btn.disabled = false;
+
+      console.error("ERRO:", err);
+      abrirModal("Erro na Busca", "Ocorreu uma falha técnica ao tentar localizar o processo:\n" + err.message);
+    })
+    .buscarProcessoRecolhimento(processo);
+}
+
+function preencherAnos() {
+  // IDs dos selects de cadastro (Recolhimento e Transferência)
+  const ids = ["procAno", "movProcAno"];
+  const anoAtual = new Date().getFullYear();
+  let html = "";
+
+  for (let i = anoAtual + 1; i >= 2019; i--) {
+    html += `<option value="${i}">${i}</option>`;
+  }
+
+  ids.forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.innerHTML = html;
+  });
+}
+
+function preencherAnosBusca() {
+  // IDs dos selects de busca (Recolhimento e Transferência)
+  const ids = ["procAnoBusca", "movBuscaAno"];
+  const anoAtual = new Date().getFullYear();
+  let html = "";
+
+  for (let i = anoAtual + 1; i >= 2019; i--) {
+    html += `<option value="${i}">${i}</option>`;
+  }
+
+  ids.forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.innerHTML = html;
+  });
+}
+
+function montarProcesso() {
+
+  const numero = document.getElementById("procNumero").value.padStart(6, "0");
+  const ano = document.getElementById("procAno").value;
+  const final = document.getElementById("procFinal").value.padStart(2, "0");
+
+  if (!/^\d{6}$/.test(numero) || !/^\d{2}$/.test(final)) {
+    alert("Preencha corretamente o número do processo.");
+    return null;
+  }
+
+  return `23076.${numero}/${ano}-${final}`;
+}
+
+function montarProcessoBusca() {
+
+  const numeroRaw = document.getElementById("procNumeroBusca").value;
+  const ano = document.getElementById("procAnoBusca").value;
+  const finalRaw = document.getElementById("procFinalBusca").value;
+
+  if (!numeroRaw || !ano || !finalRaw) {
+    alert("Preencha todos os campos da busca.");
+    return null;
+  }
+
+  const numero = numeroRaw.padStart(6, "0");
+  const final = finalRaw.padStart(2, "0");
+
+  return `23076.${numero}/${ano}-${final}`;
+}
+
+function montarProcessoNormalizado(numero, ano, final) {
+  return `23076${numero.padStart(6,"0")}${ano}${final.padStart(2,"0")}`;
+}
+
+
+function adicionarTombosRec() {
+  const btn = document.querySelector("button[onclick='adicionarTombosRec()']");
+  try {
+    const inputTombos = document.getElementById("inputTombosRec");
+    const inputData = document.getElementById("dataColeta");
+    const texto = inputTombos ? inputTombos.value.trim() : "";
+    const dataColeta = inputData ? inputData.value : "";
+
+    if (!texto || !dataColeta) {
+      abrirModal("Atenção", "Informe os tombos e a data da coleta.");
+      return;
+    }
+
+    const tombos = texto.split("\n").map(t => t.trim()).filter(t => t);
+
+    // Validação dos 36 tombos
+    if (tombos.length > 36) {
+      abrirModal("Limite Excedido", "Máximo de 36 tombos. Você informou " + tombos.length);
+      return;
+    }
+
+    mostrarLoader();
+    if (btn) btn.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado && resultado.length > 0) {
+          resultado.forEach(item => {
+            const existe = listaRecolhimento.some(x => x.sipac === item.sipac || x.siads === item.siads);
+            if (!existe && item.descricao !== "NÃO ENCONTRADO") {
+              listaRecolhimento.push(item);
+            }
+          });
+          renderListaRecolhimento(); // Esta função não deve ter a coluna de Patrimônio
+          inputTombos.value = "";
+        }
+        esconderLoader();
+        if (btn) btn.disabled = false;
+      })
+      .buscarTombosMovimento(tombos);
+  } catch (e) {
+    esconderLoader();
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderListaRecolhimento() {
+
+  const container = document.getElementById("listaTombosRecRender");
+
+  if (listaRecolhimento.length === 0) {
+    container.innerHTML = "<div class='card'>Nenhum bem adicionado</div>";
+    return;
+  }
+
+  let html = `
+    <div class="card">
+      <table>
+        <tr>
+          <th>SIPAC</th>
+          <th>SIADS</th>
+          <th>Descrição</th>
+          <th>UG</th>
+          <th>UORG</th>
+          <th>Destino</th>
+          <th>UORG Destino</th>
+          <th></th>
+        </tr>
+  `;
+
+  listaRecolhimento.forEach((item, i) => {
+
+    // 🔥 select de destino
+    let options = `<option value="">Selecione</option>`;
+    listaDestinos.forEach(d => {
+      const selected = item.destino === d.destino ? "selected" : "";
+      options += `<option value="${d.destino}" ${selected}>${d.destino}</option>`;
+    });
+
+    html += `
+      <tr>
+        <td>${item.sipac}</td>
+        <td>${item.siads}</td>
+        <td>${item.descricao}</td>
+        <td>${item.ug}</td>
+        <td>${item.uorg}</td>
+        
+
+        <td>
+          <select onchange="definirDestinoRec(${i}, this.value)">
+            ${options}
+          </select>
+        </td>
+
+        <td>
+          <input value="${item.uorgDestino || ""}" readonly>
+        </td>
+
+        <td>
+          <button onclick="removerItemRec(${i})">❌</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+      </table>
+    </div>
+  `;
+
+  html += `
+  </table>
+
+  <div style="margin-top:15px; text-align:right;">
+     <button id="btnGerarResumo" onclick="gerarResumoRecolhimento()">Prosseguir</button>
+  </div>
+
+</div>
+`;
+
+  container.innerHTML = html;
+}
+
+function removerItemRec(index) {
+  listaRecolhimento.splice(index, 1);
+  renderListaRecolhimento();
+}
+
+function definirDestinoRec(index, destinoSelecionado) {
+
+  const uorg = mapaDestinoUorg[destinoSelecionado] || "";
+
+  listaRecolhimento[index].destino = destinoSelecionado;
+  listaRecolhimento[index].uorgDestino = uorg;
+
+  renderListaRecolhimento(); // 🔁 re-renderiza já preenchido
+}
+
+function validarDestinosRecolhimento() {
+
+  const faltando = listaRecolhimento.some(item => !item.destino);
+
+  if (faltando) {
+    alert("Preencha o destino de todos os bens antes de prosseguir.");
+    return false;
+  }
+
+  return true;
+}
+
+let gruposRecolhimento = [];
+
+async function gerarResumoRecolhimento() {
+  if (!validarDestinosRecolhimento()) return;
+
+  // --- INÍCIO DO LOADING E BLOQUEIO ---
+  const btn = document.getElementById("btnGerarResumo");
+  if (btn) btn.disabled = true; // Evita duplo clique
+  mostrarLoader(); 
+
+  const UG_DESTINO_FIXA = "153409";
+  const grupos = {};
+
+  try {
+    // 1. Agrupamento dos itens
+    listaRecolhimento.forEach(item => {
+      const chave = item.uorg + "|" + item.uorgDestino;
+      if (!grupos[chave]) {
+        grupos[chave] = {
+          uorgOrigem: item.uorg,
+          ugOrigem: item.ug,
+          uorgDestino: item.uorgDestino,
+          uorgPatrimonio: "", // Campo que será preenchido via servidor
+          destino: item.destino,
+          ugDestino: UG_DESTINO_FIXA,
+          quantidade: 0,
+          tombos: [],
+          bens: []
+        };
+      }
+      grupos[chave].quantidade++;
+      const t = item.siads || item.sipac;
+      if (t) grupos[chave].tombos.push(t);
+      grupos[chave].bens.push(item);
+    });
+
+    const listaGrupos = Object.values(grupos);
+
+    // 2. Busca das UORGs de Patrimônio (Chamada assíncrona)
+    for (let g of listaGrupos) {
+      g.uorgPatrimonio = await new Promise((resolve) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(() => resolve("Erro na busca"))
+          .buscarUorgPatrimonio(g.ugOrigem);
+      });
+    }
+
+    // 3. Mapeamento final dos grupos
+    gruposRecolhimento = listaGrupos.map((g, index) => {
+      const tipoMov = String(g.ugOrigem).trim() !== UG_DESTINO_FIXA
+          ? "TRANSFERENCIA ENTRE UG'S"
+          : "TROCA DE RESPONSABILIDADE";
+
+      return {
+        grupo: index + 1,
+        ...g,
+        tombosStr: g.tombos.join("; "),
+        tipoMov
+      };
+    });
+
+    // 4. Renderização da tabela de resumo
+    renderResumoRecolhimento(gruposRecolhimento);
+
+  } catch (erro) {
+    console.error("Erro ao gerar resumo:", erro);
+    alert("Ocorreu um erro ao processar o resumo.");
+  } finally {
+    // --- FIM DO LOADING E LIBERAÇÃO ---
+    esconderLoader();
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderResumoRecolhimento(lista) {
+
+  const container = document.getElementById("resumoRecolhimento");
+
+  let html = `
+    <div class="section-title">Resumo do Recolhimento</div>
+    <div class="card">
+      <table>
+        <tr>
+          <th>GRUPO</th>
+          <th>UG ORIGEM</th>
+          <th>UORG ORIGEM</th>
+          <th>UORG PATRIMÔNIO</th> <th>UORG DESTINO</th>
+          <th>UG DESTINO</th>
+          <th>UORG DESTINO</th>
+          <th>DESTINO</th>
+          <th>QTD BENS</th>
+          <th>TOMBOS (SIADS)</th>
+          <th>TIPO MOVIMENTAÇÃO</th>
+        </tr>
+  `;
+
+  lista.forEach(g => {
+    html += `
+      <tr>
+        <td>${g.grupo}</td>
+        <td>${g.ugOrigem}</td>
+        <td>${g.uorgOrigem}</td>
+        <td style="color: blue; font-weight: bold;">${g.uorgPatrimonio}</td> <td>${g.uorgDestino}</td>
+        <td>${g.ugDestino || "-"}</td>
+        <td>${g.uorgDestino}</td>
+        <td>${g.destino}</td>
+        <td>${g.quantidade}</td>
+        <td>${g.tombosStr}</td>
+        <td>${g.tipoMov}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+  <div style="margin-top:15px; text-align:right; gap: 10px; display: flex; justify-content: flex-end;">
+    <button onclick="limparRecolhimento()" style="background-color: #6c757d;">🧹 Limpar Tudo</button>
+    <button id="btnSalvarFinal" onclick="salvarRecolhimentoFinal()">💾 Salvar e Gerar PDF</button>
+  </div>
+`;
+
+  html += `
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+  container.classList.remove("hidden");
+}
+
+function atualizarDestino(index, destinoSelecionado) {
+
+  const item = listaRecolhimento[index];
+
+  item.destino = destinoSelecionado;
+  item.uorgDestino = mapaDestinoUorg[destinoSelecionado] || "";
+
+  // 🔥 UG destino não precisa salvar no item
+  // ela já é fixa no agrupamento
+
+  renderListaRecolhimento();
+}
+
+function salvarRecolhimentoFinal() {
+  if (!gruposRecolhimento || gruposRecolhimento.length === 0) {
+    abrirModal("Atenção", "Nenhum grupo para salvar.");
+    return;
+  }
+
+  // Identifica o botão para aplicar o loading
+  const btnSalvar = document.querySelector("button[onclick='salvarRecolhimentoFinal()']");
+  const dataColeta = document.getElementById("dataColeta").value;
+
+  if (!dataColeta) {
+    abrirModal("Atenção", "Informe a data da coleta.");
+    return;
+  }
+
+  // Bloqueia o botão e mostra o loader
+  if (btnSalvar) btnSalvar.disabled = true;
+  mostrarLoader();
+
+  const dados = {
+    processo: montarProcessoBusca(),
+    dataColeta: dataColeta,
+    grupos: gruposRecolhimento 
+  };
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      esconderLoader();
+      // Não reativamos o botão se o sucesso implicar em fechar a tarefa, 
+      // mas por segurança:
+      if (btnSalvar) btnSalvar.disabled = false;
+
+      alert("Salvo com sucesso! Sequencial base: " + resp.sequencialBase);
+
+      // --- PROCESSAMENTO DO PDF (CORREÇÃO PARA NÃO CORROMPER) ---
+      try {
+        const byteCharacters = atob(resp.pdf);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Recolhimento_" + dados.processo + ".pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error("Erro ao gerar PDF no navegador:", e);
+        abrirModal("Erro", "O arquivo foi salvo, mas houve um erro ao baixar o PDF.");
+      }
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      if (btnSalvar) btnSalvar.disabled = false;
+      abrirModal("Erro", "Erro ao salvar: " + err.message);
+    })
+    .salvarRecolhimento(dados);
+}
+
+function limparRecolhimento() {
+  // 1. Confirmação para evitar perda acidental
+  if (listaRecolhimento.length > 0) {
+    if (!confirm("Deseja realmente limpar todos os dados preenchidos?")) {
+      return;
+    }
+  }
+
+  // 2. Reseta as variáveis de controle
+  listaRecolhimento = [];
+  gruposRecolhimento = [];
+
+  // 3. Limpa os campos de texto
+  const camposParaLimpar = [
+    "inputTombosRec", 
+    "procNumeroBusca", 
+    "procFinalBusca", 
+    "dataColeta"
+  ];
+  
+  camposParaLimpar.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  // 4. Reseta os selects (Ano)
+  const selectAno = document.getElementById("procAnoBusca");
+  if (selectAno) selectAno.selectedIndex = 0;
+
+  // 5. Limpa os containers de resultado e resumo
+  document.getElementById("dadosProcessoRec").innerHTML = "";
+  document.getElementById("listaTombosRecRender").innerHTML = "";
+  
+  const resumo = document.getElementById("resumoRecolhimento");
+  resumo.innerHTML = "";
+  resumo.classList.add("hidden");
+
+  // 6. Esconde os blocos e volta para o estado inicial
+  document.getElementById("blocoDataColeta").classList.add("hidden");
+  document.getElementById("blocoTombosRec").classList.add("hidden");
+
+  // 7. Feedback visual
+  abrirModal("Limpeza", "O formulário foi resetado com sucesso.");
+  
+  // Rola a tela para o topo do formulário de busca
+  window.scrollTo(0, 0);
+}
+
+
+
+// 2. COPIA O TEXTO
+function copiarTextoMac() {
+  const copyText = document.getElementById("outputMac");
+  copyText.select();
+  copyText.setSelectionRange(0, 99999);
+  document.execCommand("copy");
+  abrirModal("Sucesso", "Texto copiado!");
+}
+
+// 3. GERA E BAIXA O ARQUIVO .MAC PARA RECOLHIMENTO (Versão Segura contra erros de Sintaxe)
+function baixarArquivoMac() {
+  const conteudoMac = document.getElementById("outputMac").value;
+  const sequencial = document.getElementById("buscaSequencialMac").value;
+
+  if (!conteudoMac) {
+    abrirModal("Erro", "Gere o texto do comando primeiro.");
+    return;
+  }
+
+  try {
+    // Baixa o conteúdo de outputMac diretamente, pois ele já contém o XML formatado
+    const blob = new Blob([conteudoMac], { type: "text/plain;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `INCMOVIMENTO_${sequencial}.mac`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Erro ao baixar:", e);
+    alert("Erro ao gerar o arquivo.");
+  }
+}
+
+// Alternar abas da Transferência
+function alternarTabTransferencia(event, nomeAba) {
+  document.querySelectorAll('#abaMovimentacao .tab-content').forEach(aba => aba.classList.add('hidden'));
+  document.querySelectorAll('#abaMovimentacao .tab-link').forEach(link => link.classList.remove('active'));
+
+  if (nomeAba === 'cadastro') document.getElementById('subAbaCadMov').classList.remove('hidden');
+  if (nomeAba === 'tombos') document.getElementById('subAbaTombosMov').classList.remove('hidden');
+  if (nomeAba === 'mac') document.getElementById('subAbaMacMov').classList.remove('hidden');
+
+  event.currentTarget.classList.add('active');
+}
+
+// Lógica de Carga e Descarga fixa
+function ajustarCargaDescarga() {
+  const tipo = document.getElementById("movTipoTransf").value;
+  const selectCarga = document.getElementById("movCargaDescarga");
+  const tabTombos = document.getElementById("tabTombosMov");
+
+  if (["Reaproveitamento", "Movimentação Interna", "Distribuição de Bens"].includes(tipo)) {
+    selectCarga.value = "SIM";
+    selectCarga.disabled = true;
+  } else {
+    selectCarga.disabled = false;
+  }
+
+  // Esconde aba de tombos se for Movimentação Interna
+  if (tipo === "Movimentação Interna") {
+    tabTombos.style.display = "none";
+  } else {
+    tabTombos.style.display = "block";
+  }
+
+  atualizarExibicaoBlocoOrigem();
+}
+
+/**
+ * Salva os dados do processo na aba TRANSFERENCIA
+ */
+function salvarProcessoTransferencia() {
+  const btn = document.querySelector("button[onclick='salvarProcessoTransferencia()']");
+  
+  const num = document.getElementById("movProcNum").value.trim();
+  const ano = document.getElementById("movProcAno").value;
+  const dig = document.getElementById("movProcDig").value.trim();
+  const tipo = document.getElementById("movTipoTransf").value;
+
+  // 1. Validação padrão dos campos iniciais do processo
+  if (!tipo || !num || !ano || !dig) {
+    abrirModal("Atenção", "Preencha o Tipo e o número do Processo.");
+    return;
+  }
+
+  const processoCompleto = `23076.${num}/${ano}-${dig}`;
+  const ugOrigem = document.getElementById("movUgOrigem") ? document.getElementById("movUgOrigem").value : "";
+  const uorgOrigem = document.getElementById("movUorgOrigem") ? document.getElementById("movUorgOrigem").value : "";
+
+  // 2. Validação condicional da Origem
+  if (tipo === "Transferência" && (!ugOrigem || !uorgOrigem)) {
+    abrirModal("Atenção", "Para o tipo de operação 'Transferência', os Dados de Origem (UG e UORG) são obrigatórios.");
+    return;
+  }
+
+  // 3. Validação condicional do Arquivo Anexado
+  const arquivoInput = document.getElementById("arquivoSolicitacao");
+  if (tipo === "Movimentação Interna") {
+    if (!arquivoInput || arquivoInput.files.length === 0) {
+      abrirModal("Atenção", "O upload da Solicitação de Movimentação é obrigatório para este tipo de operação.");
+      return;
+    }
+  }
+
+  // 4. Montagem da estrutura básica do objeto de envio com os 🌟 NOVOS CAMPOS (M ao R)
+  const dados = {
+    tipo: tipo,
+    carga: document.getElementById("movCargaDescarga").value,
+    processo: processoCompleto,
+    dataEnvio: document.getElementById("movDataEnvio").value,
+    ugDestino: document.getElementById("movUgDestino").value,
+    uorgDestino: document.getElementById("movUorgDestino").value,
+    ugOrigem: ugOrigem,
+    uorgOrigem: uorgOrigem,
+    
+    // 🌟 CAPTURA DOS DADOS DOS SERVIDORES QUE ACOMPANHAM A RETIRADA E ENTREGA
+    servidorRetirada: document.getElementById("movServidorRetirada") ? document.getElementById("movServidorRetirada").value.trim() : "",
+    telefoneRetirada: document.getElementById("movTelRetirada") ? document.getElementById("movTelRetirada").value.trim() : "",
+    emailRetirada: document.getElementById("movEmailRetirada") ? document.getElementById("movEmailRetirada").value.trim() : "",
+    servidorEntrega: document.getElementById("movServidorEntrega") ? document.getElementById("movServidorEntrega").value.trim() : "",
+    telefoneEntrega: document.getElementById("movTelEntrega") ? document.getElementById("movTelEntrega").value.trim() : "",
+    emailEntrega: document.getElementById("movEmailEntrega") ? document.getElementById("movEmailEntrega").value.trim() : "",
+    
+    arquivo: null
+  };
+
+  // Bloqueia o botão e mostra o carregamento
+  if (btn) btn.disabled = true;
+  mostrarLoader();
+
+  // Função interna para realizar o disparo ao servidor
+  const enviarParaServidor = (payload) => {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        esconderLoader();
+        if (btn) btn.disabled = false;
+        
+        if (resp === "OK") {
+          abrirModal("Sucesso", "Processo de transferência salvo com sucesso!");
+          limparCamposTransferencia();
+        }
+      })
+      .withFailureHandler(function(err) {
+        esconderLoader();
+        if (btn) btn.disabled = false;
+        abrirModal("Erro", "Falha: " + err.message);
+      })
+      .salvarAbaTransferencia(payload);
+  };
+
+  // 5. Se houver arquivo anexado, converte para Base64 antes de chamar a função de envio
+  if (arquivoInput && arquivoInput.files.length > 0) {
+    const file = arquivoInput.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      const dataUrl = e.target.result;
+      const base64Data = dataUrl.split(",")[1];
+      
+      dados.arquivo = {
+        base64: base64Data,
+        mimeType: file.type,
+        nome: file.name
+      };
+      
+      enviarParaServidor(dados);
+    };
+    
+    reader.readAsDataURL(file);
+  } else {
+    // Envio direto se não houver arquivo anexo (outros tipos de operação)
+    enviarParaServidor(dados);
+  }
+}
+
+// Função auxiliar interna para realizar a chamada ao Google Apps Script
+function ejecutarEnvioTransferenciaServer(dados, btn) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      esconderLoader();
+      if (btn) btn.disabled = false;
+      
+      if (resp === "OK") {
+        abrirModal("Sucesso", "Processo de transferência salvo com sucesso!");
+        limparCamposTransferencia();
+      }
+    })
+    .withFailureHandler(function(err) {
+      esconderLoader();
+      if (btn) btn.disabled = false;
+      abrirModal("Erro", "Falha: " + err.message);
+    })
+    .salvarAbaTransferencia(dados);
+}
+
+/**
+ * Limpa todos os campos da aba de cadastro e reseta estados
+ */
+/**
+ * Limpa todos os campos da aba de cadastro e reseta estados
+ */
+function limparCamposTransferencia() {
+  const campos = [
+    "movTipoTransf", 
+    "movCargaDescarga", 
+    "movProcNum", 
+    "movProcDig", 
+    "movDataEnvio", 
+    "movUgDestino", 
+    "movUorgDestino",
+    // 🌟 Limpeza dos novos campos incluídos no fluxo
+    "movServidorRetirada",
+    "movTelRetirada",
+    "movEmailRetirada",
+    "movServidorEntrega",
+    "movTelEntrega",
+    "movEmailEntrega"
+  ];
+  
+  campos.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === "SELECT") {
+        el.selectedIndex = 0;
+      } else {
+        el.value = "";
+      }
+    }
+  });
+  
+  // Regra de negócio: Reativar o select de carga e descarga 
+  // caso ele tenha sido desabilitado pela função ajustarCargaDescarga()
+  const selectCarga = document.getElementById("movCargaDescarga");
+  if (selectCarga) {
+    selectCarga.disabled = false;
+  }
+  
+  // Opcional: Focar no primeiro campo novamente
+  document.getElementById("movTipoTransf").focus();
+
+  // Resetar elementos dinâmicos/busca de destino se existirem na tela
+  if (document.getElementById("buscaMovUgDestino")) document.getElementById("buscaMovUgDestino").value = "";
+  if (document.getElementById("movUgDestino")) document.getElementById("movUgDestino").value = "";
+  if (document.getElementById("buscaMovUorgDestino")) {
+    document.getElementById("buscaMovUorgDestino").value = "";
+    document.getElementById("buscaMovUorgDestino").placeholder = "Selecione primeiro a UG de destino...";
+    document.getElementById("buscaMovUorgDestino").disabled = true;
+  }
+  if (document.getElementById("movUorgDestino")) document.getElementById("movUorgDestino").value = "";
+}
+
+/**
+ * Busca os dados do processo na aba TRANSFERENCIA para liberar a inclusão de tombos
+ */
+function buscarProcessoTransferenciaFront() {
+  const num = document.getElementById("movBuscaNum").value;
+  const ano = document.getElementById("movBuscaAno").value;
+  const dig = document.getElementById("movBuscaDig").value;
+
+  if (!num || !ano || !dig) {
+    abrirModal("Atenção", "Informe o número do processo completo para buscar.");
+    return;
+  }
+
+  const processoFormatado = `23076.${num}/${ano}-${dig}`;
+  
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(function(dados) {
+      esconderLoader();
+      
+      if (!dados) {
+        abrirModal("Erro", "Processo não encontrado na aba de TRANSFERÊNCIA. Verifique se o número está correto ou se o processo foi salvo.");
+        return;
+      }
+
+      // 1. Apresenta o resumo do que foi encontrado
+      document.getElementById("dadosProcessoMov").innerHTML = `
+        <div class="card" style="background-color: #e9ecef; border-left: 5px solid #1F4E78;">
+          <p style="margin: 0;"><strong>Tipo:</strong> ${dados.tipo}</p>
+          <p style="margin: 5px 0 0 0;"><strong>Destino:</strong> ${dados.ugDestino} / ${dados.uorgDestino}</p>
+        </div>
+      `;
+
+      // 2. Libera o bloco para digitar os tombos
+      document.getElementById("blocoTombosMov").classList.remove("hidden");
+
+      // 3. Guarda os dados em variáveis globais para usar na hora de salvar os tombos
+      window.dadosProcessoAtivo = {
+        processo: processoFormatado,
+        ugDestino: dados.ugDestino,
+        uorgDestino: dados.uorgDestino,
+        tipo: dados.tipo
+      };
+    })
+    .withFailureHandler(function(err) {
+      esconderLoader();
+      abrirModal("Erro", "Falha na comunicação: " + err.message);
+    })
+    .buscarProcessoTransferencia(processoFormatado);
+}
+
+let listaMovimentacao = []; // Variável global para esta aba
+
+/**
+ * Adiciona tombos à lista temporária com todas as colunas detalhadas
+ */
+/**
+ * Adiciona tombos à lista temporária com limite de 36 itens
+ */
+function adicionarTombosMov() {
+  const texto = document.getElementById("inputTombosMov").value;
+  const btn = document.querySelector("button[onclick='adicionarTombosMov()']");
+  
+  if (!texto.trim()) {
+    abrirModal("Atenção", "Digite ou cole pelo menos um tombo.");
+    return;
+  }
+
+  // 1. Pré-processamento dos tombos inseridos para contar quantos são
+  const novosTombosRaw = texto.split("\n").map(t => t.trim()).filter(t => t !== "");
+  const totalAtual = listaMovimentacao.length;
+  const limiteMaximo = 36;
+
+  // 2. Verificação de limite antes de fazer a chamada ao servidor
+  if (totalAtual >= limiteMaximo) {
+    abrirModal("Limite Excedido", `A lista já atingiu o limite máximo de ${limiteMaximo} tombos.`);
+    return;
+  }
+
+  if (totalAtual + novosTombosRaw.length > limiteMaximo) {
+    const disponiveis = limiteMaximo - totalAtual;
+    abrirModal("Atenção", `Pode adicionar apenas mais ${disponiveis} tombos. Reduza a sua lista.`);
+    return;
+  }
+
+  // --- INÍCIO DO LOADING NO BOTÃO ---
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Validando...';
+  }
+  mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      esconderLoader();
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Adicionar';
+      }
+      
+      if (resultado.length === 0) {
+        abrirModal("Aviso", "Nenhum tombo válido encontrado.");
+        return;
+      }
+
+      // 3. Adição final com verificação de duplicados
+      resultado.forEach(item => {
+        if (!listaMovimentacao.find(i => i.siads === item.siads)) {
+          // Verificação extra de segurança para não passar de 36 no loop
+          if (listaMovimentacao.length < limiteMaximo) {
+            listaMovimentacao.push(item);
+          }
+        }
+      });
+
+      renderizarListaMov();
+      document.getElementById("inputTombosMov").value = "";
+
+      // Feedback visual se atingir o limite após a adição
+      if (listaMovimentacao.length === limiteMaximo) {
+        abrirModal("Limite Atingido", "A lista chegou a 36 tombos. Finalize este documento para iniciar outro.");
+      }
+    })
+    .withFailureHandler(err => {
+      esconderLoader();
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Adicionar';
+      }
+      abrirModal("Erro", "Erro ao buscar tombos: " + err.message);
+    })
+    .buscarTombosLote(texto);
+}
+
+/**
+ * Renderiza a tabela com todas as colunas solicitadas
+ */
+function renderizarListaMov() {
+  const div = document.getElementById("renderTombosMov");
+  if (listaMovimentacao.length === 0) {
+    div.innerHTML = "";
+    return;
+  }
+
+  let html = `
+    <div class="section-title" style="margin-top:20px;">Bens na Lista de Transferência</div>
+    <div style="overflow-x: auto;">
+      <table style="width:100%; border-collapse: collapse; font-size: 13px;">
+        <thead>
+          <tr style="background:#1F4E78; color: white;">
+            <th style="padding:10px; border:1px solid #ddd;">SIPAC</th>
+            <th style="padding:10px; border:1px solid #ddd;">SIADS</th>
+            <th style="padding:10px; border:1px solid #ddd;">Descrição</th>
+            <th style="padding:10px; border:1px solid #ddd;">UG Origem</th>
+            <th style="padding:10px; border:1px solid #ddd;">UORG Origem</th>
+            <th style="padding:10px; border:1px solid #ddd;">Ação</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  listaMovimentacao.forEach((item, index) => {
+    html += `
+      <tr>
+        <td style="padding:8px; border:1px solid #ddd;">${item.sipac || '-'}</td>
+        <td style="padding:8px; border:1px solid #ddd;">${item.siads || '-'}</td>
+        <td style="padding:8px; border:1px solid #ddd;">${item.descricao}</td>
+        <td style="padding:8px; border:1px solid #ddd; text-align:center;">${item.ug}</td>
+        <td style="padding:8px; border:1px solid #ddd; text-align:center;">${item.uorg}</td>
+        <td style="padding:8px; border:1px solid #ddd; text-align:center;">
+          <button onclick="removerItemMov(${index})" style="background:#dc3545; color:white; border:none; padding:5px 10px; cursor:pointer; border-radius:4px;">Excluir</button>
+        </td>
+      </tr>`;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:15px; text-align:right;">
+      <button onclick="gerarResumoMovimentacao()" style="background-color: #17a2b8; padding: 10px 20px;">🔍 Gerar Resumo</button>
+    </div>`;
+
+  div.innerHTML = html;
+}
+
+function removerItemMov(index) {
+  listaMovimentacao.splice(index, 1);
+  renderizarListaMov();
+}
+
+/**
+ * Função final que grava na planilha DOCUMENTO_MOVIMENTO 
+ * usando os dados do processo que buscamos anteriormente
+ */
+function finalizarMovimentacao() {
+  // 1. Verifica se há itens na lista
+  if (listaMovimentacao.length === 0) {
+    abrirModal("Atenção", "A lista de bens está vazia.");
+    return;
+  }
+
+  // 2. Verifica se os dados do processo foram carregados (da busca na Aba 2)
+  if (!window.dadosProcessoAtivo) {
+    abrirModal("Erro", "Dados do processo não localizados. Por favor, pesquise o processo novamente antes de finalizar.");
+    return;
+  }
+
+  mostrarLoader();
+  const btn = document.querySelector("button[onclick='finalizarMovimentacao()']");
+  if (btn) btn.disabled = true;
+
+  // 3. Monta o pacote de dados exatamente como o servidor espera
+  const payload = {
+    processo: window.dadosProcessoAtivo.processo,
+    ugDestino: window.dadosProcessoAtivo.ugDestino,
+    uorgDestino: window.dadosProcessoAtivo.uorgDestino,
+    tipo: window.dadosProcessoAtivo.tipo,
+    itens: listaMovimentacao
+  };
+
+  console.log("Enviando payload de movimentação:", payload);
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      esconderLoader();
+      if (btn) btn.disabled = false;
+      
+      // Ajusta variáveis dependendo se o servidor retorna um objeto ou só string (para evitar erros de quebra)
+      const sequencial = resp.sequencial || resp.sequencialGerado || resp;
+      const pdfBase64 = resp.pdf;
+
+      // 1. Exibe a mensagem de sucesso na tela
+      abrirModal("Sucesso", "Movimentação finalizada com sucesso!\n\nSequencial Gerado: " + sequencial);
+      
+      // 2. 🔥 NOVO: DISPARA O DOWNLOAD AUTOMÁTICO DO PDF (Se o servidor enviou o Base64)
+      if (pdfBase64) {
+        try {
+          // Converte Base64 -> Blob de forma segura
+          const byteCharacters = atob(pdfBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: "application/pdf" });
+
+          // Cria URL temporária e dispara clique de download invisível
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `Movimentacao_${sequencial}.pdf`;
+
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Libera espaço da memória do navegador
+          URL.revokeObjectURL(url);
+        } catch (errPdf) {
+          console.error("Erro ao decodificar ou baixar o PDF gerado:", errPdf);
+          alert("A movimentação foi salva, mas ocorreu um erro ao gerar o arquivo PDF.");
+        }
+      } else {
+        console.warn("Nenhum dado de PDF foi retornado pelo servidor na propriedade 'resp.pdf'.");
+      }
+
+      // 3. Limpa os dados da tela para uma nova operação
+      limparTelaMovimentacao();
+    })
+    .withFailureHandler(function(err) {
+      esconderLoader();
+      if (btn) btn.disabled = false;
+      console.error("Erro ao finalizar:", err);
+      abrirModal("Erro", "Falha ao gravar no servidor: " + err.message);
+    })
+    .salvarTombosTransferencia(payload);
+}
+
+/**
+ * Gera o HTML do Resumo da Transferência, similar ao Recolhimento
+ */
+/**
+ * Gera o Resumo de Transferência Agrupado (Lógica idêntica ao Recolhimento)
+ */
+/**
+ * Gera o Resumo de Transferência Agrupado com classificação SIADS
+ */
+// 🌟 FUNÇÃO ASSÍNCRONA INSPIRADA NO RECOLHIMENTO
+async function gerarResumoMovimentacao() {
+  const resumoDiv = document.getElementById("resumoMovimentacao");
+  
+  if (!listaMovimentacao || listaMovimentacao.length === 0) {
+    resumoDiv.innerHTML = "";
+    resumoDiv.classList.add("hidden");
+    return;
+  }
+
+  // Ativa o loader visual enquanto processa os dados do servidor
+  mostrarLoader();
+
+  const dadosProc = window.dadosProcessoAtivo || {};
+  const grupos = {};
+
+  try {
+    // 1. Agrupamento dos itens (igual ao recolhimento, uorgPatrimonio começa vazio)
+    listaMovimentacao.forEach(item => {
+      const chave = `${item.ug}_${item.uorg}_${dadosProc.ugDestino || ''}_${dadosProc.uorgDestino || ''}`;
+      
+      if (!grupos[chave]) {
+        const classeSiads = (String(item.ug).trim() === String(dadosProc.ugDestino || '').trim()) 
+                            ? "TROCA DE RESPONSABILIDADE" 
+                            : "TRANSFERENCIA ENTRE UG'S";
+
+        grupos[chave] = {
+          ugOrigem: item.ug,
+          uorgOrigem: item.uorg,
+          uorgPatrimonio: "", // ⏳ Campo que será preenchido via servidor
+          ugDestino: dadosProc.ugDestino || '',
+          uorgDestino: dadosProc.uorgDestino || '',
+          tipoSiads: classeSiads,
+          tombos: [],
+          qtd: 0
+        };
+      }
+      grupos[chave].tombos.push(item.siads);
+      grupos[chave].qtd++;
+    });
+
+    const listaGrupos = Object.values(grupos);
+
+    // 2. Busca das UORGs de Patrimônio no servidor (Chamada assíncrona)
+    for (let g of listaGrupos) {
+      g.uorgPatrimonio = await new Promise((resolve) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(() => resolve("Erro na busca"))
+          .buscarUorgPatrimonio(g.ugOrigem);
+      });
+      
+      // Se por acaso voltar vazio do servidor, coloca um aviso em vez de copiar a origem
+      if (!g.uorgPatrimonio || String(g.uorgPatrimonio).trim() === "") {
+        g.uorgPatrimonio = "Não localizada";
+      }
+    }
+
+    // 3. Montagem da Tabela Visual
+    let html = `
+      <div class="card" style="margin-top:20px; border-top: 5px solid #17a2b8;">
+        <h3 style="color: #1F4E78; margin-bottom: 15px;">📋 Resumo Agrupado (Classificação SIADS)</h3>
+        <div style="overflow-x: auto;">
+          <table class="tabela-resumo" style="width:100%; border-collapse: collapse; font-size: 11px; text-align: center;">
+            <thead>
+              <tr style="background: #f2f2f2;">
+                <th style="border: 1px solid #ddd; padding: 8px;">GRUPO</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">UG ORIGEM</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">UORG ORIGEM</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">UORG PATRIMÔNIO</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">UG DESTINO</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">UORG DESTINO</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">QTD BENS</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">TOMBOS (SIADS)</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">TIPO MOVIMENTAÇÃO SIADS</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+    let contador = 1;
+    for (let g of listaGrupos) {
+      // Destaca a azul como no recolhimento
+      html += `
+        <tr>
+          <td style="border: 1px solid #ddd; padding: 8px;">${contador++}</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${g.ugOrigem}</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${g.uorgOrigem}</td>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: blue;">${g.uorgPatrimonio}</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${g.ugDestino}</td>
+          <td style="border: 1px solid #ddd; padding: 8px;">${g.uorgDestino}</td>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${g.qtd}</td>
+          <td style="border: 1px solid #ddd; padding: 8px; max-width: 250px; word-wrap: break-word;">${g.tombos.join("; ")}</td>
+          <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #1F4E78;">${g.tipoSiads}</td>
+        </tr>`;
+    }
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+        
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button onclick="limparTelaMovimentacao()" style="background-color: #6c757d;">🧹 Limpar Tudo</button>
+          <button onclick="finalizarMovimentacao()" style="background-color: #28a745;">💾 Confirmar e Finalizar</button>
+        </div>
+      </div>`;
+
+    resumoDiv.innerHTML = html;
+    resumoDiv.classList.remove("hidden");
+    resumoDiv.scrollIntoView({ behavior: 'smooth' });
+
+  } catch (erro) {
+    console.error("Erro ao gerar resumo movimentação:", erro);
+    alert("Ocorreu um erro ao processar o resumo.");
+  } finally {
+    // Esconde o loader quando terminar (com sucesso ou erro)
+    esconderLoader();
+  }
+}
+
+/**
+ * Função para resetar a aba de tombos após finalizar ou clicar em limpar
+ */
+function limparTelaMovimentacao() {
+  if (listaMovimentacao.length > 0) {
+    if (!confirm("Deseja realmente limpar a lista de bens atual?")) return;
+  }
+  
+  listaMovimentacao = [];
+  document.getElementById("renderTombosMov").innerHTML = "";
+  document.getElementById("resumoMovimentacao").innerHTML = "";
+  document.getElementById("resumoMovimentacao").classList.add("hidden");
+  document.getElementById("inputTombosMov").value = "";
+  document.getElementById("blocoTombosMov").classList.add("hidden");
+  document.getElementById("dadosProcessoMov").innerHTML = "";
+  if(document.getElementById("movServidorRetirada")) document.getElementById("movServidorRetirada").value = "";
+  if(document.getElementById("movTelRetirada")) document.getElementById("movTelRetirada").value = "";
+  if(document.getElementById("movEmailRetirada")) document.getElementById("movEmailRetirada").value = "";
+  if(document.getElementById("movServidorEntrega")) document.getElementById("movServidorEntrega").value = "";
+  if(document.getElementById("movTelEntrega")) document.getElementById("movTelEntrega").value = "";
+  if(document.getElementById("movEmailEntrega")) document.getElementById("movEmailEntrega").value = "";
+}
+
+
+/**
+ * Busca os dados do sequencial série 3 e gera o comando MAC
+ */
+
+
+/**
+ * Função para baixar o arquivo .mac
+ */
+function baixarArquivoMacMov() {
+  const texto = document.getElementById("outputMacMov").value;
+  const seq = document.getElementById("buscaSeqMacMov").value;
+  if (!texto) return;
+
+  const blob = new Blob([texto], { type: "text/plain" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `MOV_${seq}.mac`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+/**
+ * LÓGICA UNIFICADA: Esta função constrói o texto do arquivo .mac
+ * Resolve o erro de "split is not a function" convertendo tudo para String primeiro.
+ */
+/**
+ * LÓGICA UNIFICADA COM LAYOUT XML (HAScript)
+ * Esta função constrói o arquivo .mac no formato correto para o emulador.
+ */
+/**
+ * LÓGICA UNIFICADA COM LAYOUT XML (HAScript)
+ */
+/**
+ * LÓGICA UNIFICADA: Esta função constrói o arquivo .mac no formato XML (HAScript)
+ * Resolve o erro de "split" e o erro de "SyntaxError" do XML.
+ */
+function construirConteudoMac(dados) {
+  // 1. Limpeza e Formatação Padrão dos Dados
+  const strTombos = String(dados.tombos || "");
+  const listaTombos = strTombos.split(";").map(t => t.trim().replace(/\D/g, "").padStart(10, '0')).join("");
+  
+  // Calcula dinamicamente a quantidade de tombamentos baseando-se no tamanho da string gerada
+  const qtdTombos = listaTombos.length / 10;
+  
+  const uorgOrigem = String(dados.uorgOrigem || "").trim().padStart(6, '0');
+  const uorgDestino = String(dados.uorgDestino || "").trim().padStart(6, '0');
+  const uorgPatrimonio = String(dados.uorgPatrimonio || "").trim().padStart(6, '0');
+  
+  // Captura do Sequencial Original
+  const seqOriginal = String(dados.sequencial || "").trim();
+
+  // Captura a UG de Origem e Destino (Garante o envio correto vindo do servidor)
+  let ugOrigemRaw = String(dados.ugOrigem || dados.ug_origem || "").trim();
+  let ugDestinoRaw = String(dados.ugDestino || dados.ugDest || dados.ug_destino || "").trim();
+  
+  const proc = String(dados.processo || "").replace(/\D/g, "");
+  
+  // Tratamento do Tipo de Movimentação SIADS (Coluna C)
+  const tipoMov = String(dados.tipoMovimentacao || "").toUpperCase().trim();
+
+  // MATRIZ GLOBAL DE COMANDOS POR UG (Compartilhada para Origem e Destino)
+  const tabelaComandosUg = {
+    "153080": "x[enter]",
+    "153105": "[tab]x[enter]",
+    "153413": "[tab][tab]x[enter]",
+    "153091": "[tab][tab][tab]x[enter]",
+    "153096": "[tab][tab][tab][tab]x[enter]",
+    "153098": "[tab][tab][tab][tab][tab]x[enter]",
+    "156905": "[tab][tab][tab][tab][tab][tab]x[enter]",
+    "153090": "[tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "150230": "[tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153409": "[tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153102": "[tab][tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153101": "[tab][tab][tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153095": "[pf8]x[enter]",
+    "154712": "[pf8][tab]x[enter]",
+    "153092": "[pf8][tab][tab]x[enter]",
+    "153093": "[pf8][tab][tab][tab]x[enter]",
+    "153375": "[pf8][tab][tab][tab][tab]x[enter]",
+    "153376": "[pf8][tab][tab][tab][tab][tab]x[enter]",
+    "152771": "[pf8][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153094": "[pf8][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153086": "[pf8][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153089": "[pf8][tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153085": "[pf8][tab][tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153084": "[pf8][tab][tab][tab][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "153082": "[pf8][pf8]x[enter]",
+    "153088": "[pf8][pf8][tab]x[enter]",
+    "153355": "[pf8][pf8][tab][tab]x[enter]",
+    "153083": "[pf8][pf8][tab][tab][tab]x[enter]",
+    "153087": "[pf8][pf8][tab][tab][tab][tab]x[enter]",
+    "156661": "[pf8][pf8][tab][tab][tab][tab][tab]x[enter]",
+    "153081": "[pf8][pf8][tab][tab][tab][tab][tab][tab]x[enter]",
+    "150119": "[pf8][pf8][tab][tab][tab][tab][tab][tab][tab]x[enter]",
+    "150134": "[pf8][pf8][tab][tab][tab][tab][tab][tab][tab][tab]x[enter]"
+  };
+
+  let comandos = "";
+
+  // 2. FLUXO CONDICIONAL CONFORME TIPO DE MOVIMENTAÇÃO SIADS
+  if (tipoMov === "TROCA DE RESPONSABILIDADE") {
+    
+    // Mudança baseada na UG de Origem
+    comandos += "[backtab]>mudauasg[enter]";
+    if (tabelaComandosUg[ugOrigemRaw]) {
+      comandos += tabelaComandosUg[ugOrigemRaw];
+    } else {
+      console.warn("UG de Origem não encontrada no mapeamento ou vazia:", ugOrigemRaw);
+    }
+    
+    // Confirmação após selecionar a UG de Origem
+    comandos += "s[enter][enter]";
+
+    // FORMATO: TROCA DE RESPONSABILIDADE
+    comandos += "[backtab]>incmovimento[enter]";
+    comandos += "[tab][tab][tab][tab][tab][tab][tab]x[enter]";
+    comandos += "[tab]x[enter]";
+    comandos += uorgOrigem;
+    comandos += seqOriginal;
+    comandos += uorgDestino;
+    comandos += proc;
+    comandos += "[enter]";
+    comandos += listaTombos; // Injeta os tombos perfeitamente aqui
+    comandos += "[enter][enter]s[enter] [enter][pf12]x[enter]";
+    comandos += uorgOrigem;
+    comandos += "x[enter]x[enter][enter][enter]s[enter]n[enter]";
+    comandos += "[pf12][pf3][backtab]>relmovimen[enter][tab][tab]x[enter]";
+    comandos += uorgDestino;
+    comandos += "[tab][tab]x[tab]01[tab]x[enter]";
+
+  } else if (tipoMov === "TRANSFERENCIA ENTRE UG'S" || tipoMov === "TRANSFERÊNCIA ENTRE UG'S") {
+    
+    // Mudança baseada na UG de Origem
+    comandos += "[backtab]>mudauasg[enter]";
+    if (tabelaComandosUg[ugOrigemRaw]) {
+      comandos += tabelaComandosUg[ugOrigemRaw];
+    } else {
+      console.warn("UG de Origem não encontrada no mapeamento ou vazia:", ugOrigemRaw);
+    }
+    
+    // Confirmação após selecionar a UG de Origem
+    comandos += "s[enter][enter]";
+
+    // MANIPULAÇÃO DO 5º DÍGITO DO SEQUENCIAL (Índice 4)
+    let seqModificado = seqOriginal;
+    
+    if (seqOriginal.length >= 5) {
+      const parteAntes = seqOriginal.slice(0, 4);
+      const quintoDigito = seqOriginal.charAt(4);
+      const parteDepois = seqOriginal.slice(5);
+      
+      let quintoDigitoModificado = quintoDigito;
+      
+      if (quintoDigito === '2') {
+        quintoDigitoModificado = '3';
+      } else if (quintoDigito === '4') {
+        quintoDigitoModificado = '5';
+      }
+      
+      seqModificado = parteAntes + quintoDigitoModificado + parteDepois;
+    }
+
+    // FORMATO: TRANSFERÊNCIA ENTRE UG'S
+    comandos += "[backtab]>incmovimento[enter]";
+    comandos += "[tab][tab][tab][tab][tab][tab][tab]x[enter]";
+    comandos += "[tab]x[enter]";
+    comandos += uorgOrigem;
+    comandos += seqModificado; 
+    comandos += uorgPatrimonio; 
+    comandos += proc;
+    comandos += "[enter]";
+    comandos += listaTombos; // 🌟 CORRIGIDO: Agora a lista de múltiplos tombos é injetada aqui na primeira tela da transferência!
+    comandos += "[enter][enter]s[enter][enter][pf12]x[enter]";
+    comandos += uorgOrigem;
+    comandos += "x[enter]x[enter][enter][enter]s[enter]n[enter]";
+    comandos += "[pf12][tab]x[enter]x[enter]";
+    comandos += seqOriginal;   
+    comandos += "[enter]";
+    comandos += uorgDestino;
+    comandos += proc;
+    comandos += "[enter]";
+
+    // Repetição de X e comando mudauasg para a UG de Destino
+    if (qtdTombos > 0) {
+      comandos += "X".repeat(qtdTombos);
+      comandos += "[enter][enter]s[enter][enter][pf3][backtab]>mudauasg[enter]";
+    }
+
+    // Aplica o comando correspondente à UG de Destino
+    if (tabelaComandosUg[ugDestinoRaw]) {
+      comandos += tabelaComandosUg[ugDestinoRaw];
+    } else {
+      console.warn("UG de Destino não encontrada no mapeamento ou vazia:", ugDestinoRaw);
+    }
+
+    // Novos comandos adicionados no final do fluxo de transferência
+    comandos += "s[enter][enter][backtab]>incmovimento[enter]x[enter]";
+    comandos += uorgPatrimonio;
+    comandos += "[tab]x[enter]x[enter][enter][enter]s[enter][enter]n[enter][pf3]";
+
+  } else {
+    // Fallback de Segurança
+    comandos += "[backtab]>incmovimento[enter]";
+    comandos += "[tab][tab][tab][tab][tab][tab][tab]x[enter][tab]x[enter]";
+    comandos += uorgOrigem + seqOriginal + uorgDestino + proc + "[enter]" + listaTombos + "[enter][enter]s[enter]";
+  }
+
+  const dataFmt = new Date().toLocaleString('pt-BR');
+
+  // 3. Montagem Final do XML HAScript
+  const xmlCompleto = `
+<HAScript name="INCMOVIMENTO NOVA" description="" timeout="60000" pausetime="300" promptall="true" blockinput="false" author="Rafael" creationdate="${dataFmt}" supressclearevents="false" usevars="false" ignorepauseforenhancedtn="true" delayifnotenhancedtn="0" ignorepausetimeforenhancedtn="true">
+    <screen name="Tela1" entryscreen="true" exitscreen="true" transient="false">
+        <description>
+            <oia status="NOTINHIBITED" optional="false" invertmatch="false" />
+        </description>
+        <actions>
+            <input value="${comandos}" row="0" col="0" movecursor="true" xlatehostkeys="true" encrypted="false" />
+        </actions>
+        <nextscreens timeout="0"></nextscreens>
+    </screen>
+</HAScript>`;
+
+  return xmlCompleto;
+}
+
+// --- FUNÇÃO PARA RECOLHIMENTO ---
+function gerarTextoMac() {
+  const seq = document.getElementById("buscaSequencialMac").value;
+  if (!seq) return abrirModal("Atenção", "Informe o sequencial.");
+  
+  mostrarLoader();
+  google.script.run
+    .withSuccessHandler(function(dados) {
+      esconderLoader();
+      if (!dados) return abrirModal("Erro", "Sequencial não encontrado.");
+      
+      const textoFinal = construirConteudoMac(dados);
+      document.getElementById("outputMac").value = textoFinal;
+      document.getElementById("resultadoMac").classList.remove("hidden");
+    })
+    .buscarDadosParaMac(seq);
+}
+
+// --- FUNÇÃO PARA TRANSFERÊNCIA ---
+function gerarTextoMacMov() {
+  const seq = document.getElementById("buscaSeqMacMov").value;
+  if (!seq) return abrirModal("Atenção", "Informe o sequencial.");
+  
+  mostrarLoader();
+  google.script.run
+    .withSuccessHandler(function(dados) {
+      esconderLoader();
+      if (!dados) return abrirModal("Erro", "Sequencial não encontrado.");
+      
+      const textoFinal = construirConteudoMac(dados);
+      document.getElementById("outputMacMov").value = textoFinal;
+      document.getElementById("resultadoMacMov").classList.remove("hidden");
+    })
+    .buscarDadosParaMacMov(seq);
+}
+
+</script>

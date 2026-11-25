@@ -1,0 +1,185 @@
+<script>
+// =========================================================================
+// 🔎 CONTROLE DE CONSULTAS E PAGINAÇÃO (CADMAT)
+// =========================================================================
+
+// Variáveis globais de controle para a paginação do CADMAT
+let dadosCadmatFiltrados = [];
+let paginaAtualCadmat = 1;
+const itensPorPaginaCadmat = 10;
+
+/**
+ * Executa a busca do CADMAT chamando o servidor
+ */
+function consultarCadmat() {
+  const termo = document.getElementById("buscaCadmat").value;
+
+  if (!termo) {
+    document.getElementById("resultadoCadmat").innerHTML =
+      "<div class='alert error'>Informe um termo para busca</div>";
+    document.getElementById("paginacaoCadmat").innerHTML = "";
+    return;
+  }
+
+  document.getElementById("resultadoCadmat").innerHTML = "Buscando registros no catálogo...";
+  document.getElementById("paginacaoCadmat").innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(function(lista) {
+      dadosCadmatFiltrados = lista || [];
+      paginaAtualCadmat = 1;
+      renderCadmat();
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById("resultadoCadmat").innerHTML =
+        "<div class='alert error'>Erro na pesquisa: " + err.message + "</div>";
+      document.getElementById("paginacaoCadmat").innerHTML = "";
+    })
+    .consultarCadmat(termo);
+}
+
+/**
+ * Renderiza a tabela de resultados com base na página ativa (fatiamento de 10 em 10)
+ */
+function renderCadmat() {
+  const el = document.getElementById("resultadoCadmat");
+  const elPag = document.getElementById("paginacaoCadmat");
+
+  if (!dadosCadmatFiltrados || dadosCadmatFiltrados.length === 0) {
+    el.innerHTML = "<div class='alert error'>Nenhum resultado encontrado para o termo digitado.</div>";
+    elPag.innerHTML = "";
+    return;
+  }
+
+  const indiceInicio = (paginaAtualCadmat - 1) * itensPorPaginaCadmat;
+  const indiceFim = indiceInicio + itensPorPaginaCadmat;
+  const itensPaginaAtual = dadosCadmatFiltrados.slice(indiceInicio, indiceFim);
+  const totalPaginas = Math.ceil(dadosCadmatFiltrados.length / itensPorPaginaCadmat);
+
+  let html = `
+    <table class="table-striped" style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      <thead>
+        <tr style="background-color: #34495e; color: white; font-size: 0.95rem;">
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #bdc3c7;">Código</th>
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #bdc3c7;">Material / Descrição</th>
+          <th style="padding: 10px; text-align: left; border-bottom: 2px solid #bdc3c7;">Conta Contábil</th>
+        </tr>
+      </thead>
+      <tbody style="font-size: 0.9rem;">
+  `;
+
+  itensPaginaAtual.forEach(function(item) {
+    html += `
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px; font-weight: bold; color: #2c3e50;">${item.codigo}</td>
+        <td style="padding: 10px; color: #34495e;">${item.material}</td>
+        <td style="padding: 10px;"><span class="badge badge-secondary" style="background: #ecf0f1; color: #2c3e50; padding: 4px 8px; border-radius: 4px;">${item.conta}</span></td>
+      </tr>
+    `;
+  });
+
+  html += "</tbody></table>";
+  el.innerHTML = html;
+
+  if (totalPaginas > 1) {
+    elPag.innerHTML = `
+      <button class="btn-paginacao" onclick="mudarPaginaCadmat(-1)" ${paginaAtualCadmat === 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+        ◀ Anterior
+      </button>
+      <span style="font-weight: bold; font-size: 0.9rem; color: #2c3e50;">
+        Página ${paginaAtualCadmat} de ${totalPaginas} 
+        <small style="color:#7f8c8d; font-weight:normal; block; font-size: 0.75rem;">(Total de ${dadosCadmatFiltrados.length} registros)</small>
+      </span>
+      <button class="btn-paginacao" onclick="mudarPaginaCadmat(1)" ${paginaAtualCadmat === totalPaginas ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}>
+        Próxima ▶
+      </button>
+    `;
+  } else {
+    elPag.innerHTML = `<span style="color:#7f8c8d; font-size: 0.8rem; font-style: italic;">Exibindo todos os ${dadosCadmatFiltrados.length} resultados encontrados.</span>`;
+  }
+}
+
+function mudarPaginaCadmat(direcao) {
+  paginaAtualCadmat += direcao;
+  renderCadmat();
+  document.getElementById("buscaCadmat").scrollIntoView({ behavior: 'smooth' });
+}
+
+
+/**
+ * =========================================================================
+ * 🔄 CONTROLE DE CONVERSÃO / CONSULTA DE TOMBOS
+ * =========================================================================
+ */
+
+function converterTomboLote() {
+  const texto = document.getElementById("tomboBusca").value;
+
+  if (!texto.trim()) {
+    alert("Por favor, informe ao menos um tombo para consulta.");
+    return;
+  }
+
+  document.getElementById("resultadoConversao").innerHTML = "Cruzando dados dos tombos...";
+
+  google.script.run
+    .withSuccessHandler(renderConversao)
+    .withFailureHandler(err => {
+      document.getElementById("resultadoConversao").innerHTML = 
+        "<div class='alert error'>Erro na conversão: " + err.message + "</div>";
+    })
+    .converterTomboLote(texto);
+}
+
+function renderConversao(lista) {
+  if (!lista || lista.length === 0) {
+    document.getElementById("resultadoConversao").innerHTML = 
+      "<div class='alert error'>Nenhum tombo processável encontrado.</div>";
+    return;
+  }
+
+  let html = `
+    <table class="table-striped" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+      <thead>
+        <tr style="background-color: #34495e; color: white; font-size: 0.95rem;">
+          <th style="padding: 10px; text-align: left;">Tombo Pesquisado</th>
+          <th style="padding: 10px; text-align: left;">Tombo SIADS</th>
+          <th style="padding: 10px; text-align: left;">Tombo SIPAC</th>
+          <th style="padding: 10px; text-align: center;">Resultado</th>
+        </tr>
+      </thead>
+      <tbody style="font-size: 0.9rem;">
+  `;
+
+  lista.forEach(l => {
+    const ehSucesso = !l.status.startsWith("NÃO");
+    const badgeCor = ehSucesso ? "#2ecc71" : "#e74c3c";
+    
+    html += `
+      <tr style="border-bottom: 1px solid #e0e0e0;">
+        <td style="padding: 10px; font-weight: bold; color: #2c3e50;">${l.original}</td>
+        <td style="padding: 10px; color: ${l.siads === "-" ? '#7f8c8d' : '#34495e'}; font-family: monospace;">${l.siads}</td>
+        <td style="padding: 10px; color: ${l.sipac === "-" ? '#7f8c8d' : '#34495e'}; font-family: monospace;">${l.sipac}</td>
+        <td style="padding: 10px; text-align: center;">
+          <span style="background: ${badgeCor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: inline-block;">
+            ${l.status}
+          </span>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += "</tbody></table>";
+  document.getElementById("resultadoConversao").innerHTML = html;
+}
+
+/**
+ * 🔥 FUNÇÃO AUXILIAR DE SEGURANÇA (Evita erros de digitação e formatação)
+ */
+function normalizarTombo(valor) {
+  return String(valor || "")
+    .trim()
+    .replace(/\s+/g, "")   // remove espaços
+    .replace(/\.0$/, "");  // remove decimal do Sheets
+}
+</script>

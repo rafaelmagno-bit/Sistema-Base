@@ -1,0 +1,53 @@
+<script>
+  function salvarNovoCadmat() {
+    const codInput = document.getElementById("cadmatCodigo");
+    const descInput = document.getElementById("cadmatDescricao");
+    const abrevInput = document.getElementById("cadmatAbreviatura");
+    const contaSelect = document.getElementById("cadmatConta");
+    
+    if (!codInput || !descInput || !abrevInput || !contaSelect) {
+      alert("Erro ao localizar os campos do formulário.");
+      return;
+    }
+    
+    // 🌟 Aplica a regra dos 9 dígitos com zeros à esquerda
+    const codigoFormatado = codInput.value.trim().padStart(9, '0');
+    codInput.value = codigoFormatado;
+
+    const dados = {
+      codigo: codigoFormatado,
+      descricao: descInput.value.trim(),
+      abreviatura: abrevInput.value.trim(),
+      conta: contaSelect.value
+    };
+
+    const btn = document.getElementById("btnSalvarCadmat");
+    if (btn) { 
+      btn.disabled = true; 
+      btn.innerText = "⏳ Gravando..."; 
+    }
+
+    google.script.run
+      .withSuccessHandler(function(resposta) {
+        if (btn) { 
+          btn.disabled = false; 
+          btn.innerHTML = '💾 Salvar CADMAT'; 
+        }
+        
+        if (resposta.sucesso) {
+          alert(resposta.message);
+          document.getElementById("formCadmat").reset();
+        } else {
+          alert("Atenção: " + resposta.message);
+        }
+      })
+      .withFailureHandler(function(err) {
+        if (btn) { 
+          btn.disabled = false; 
+          btn.innerHTML = '💾 Salvar CADMAT'; 
+        }
+        alert("Erro crítico de comunicação: " + err.message);
+      })
+      .cadastrarNovoCadmat(dados);
+  }
+</script>

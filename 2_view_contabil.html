@@ -1,0 +1,467 @@
+<script>
+  // 1. Interceptador Inteligente de IDs (Evita quebras por divergência de nomes)
+  (function() {
+    var originalGetElementById = document.getElementById;
+    document.getElementById = function(id) {
+      var el = originalGetElementById.call(document, id);
+      if (el) return el;
+      
+      // Tabela de sinônimos conhecidos no sistema
+      var dicionarioFallbacks = {
+        "relMovRmbMes": ["movMes", "relatorioMovRmbMes", "mesMov", "selMesMov"],
+        "relMovRmbAno": ["movAno", "relatorioMovRmbAno", "anoMov", "selAnoMov"],
+        "btnGerarRelMovRmb": ["btnGerarRelMov", "btnGerarMov", "btnExecutarMov"],
+        "containerResultadosMovRmb": ["containerResultadosMov", "divResultadosMov", "areaResultadosMov"],
+        "corpoRelatorioMovAnalitico": ["corpoMovAnalitico", "tabelaMovAnaliticoCorpo", "corpoRelatorioMov"],
+        "corpoRelatorioMovResumo": ["corpoMovResumo", "tabelaMovResumoCorpo", "corpoResumoMov"],
+        "mapaRmbMes": ["mesMapa", "mapaMes", "selMesMapa"],
+        "mapaRmbAno": ["anoMapa", "mapaAno", "selAnoMapa"]
+      };
+      
+      for (var realId in dicionarioFallbacks) {
+        if (dicionarioFallbacks[realId].indexOf(id) !== -1) {
+          var realEl = originalGetElementById.call(document, realId);
+          if (realEl) return realEl;
+        }
+      }
+      for (var realId in dicionarioFallbacks) {
+        if (id === realId) {
+          var sinonimos = dicionarioFallbacks[realId];
+          for (var i = 0; i < sinonimos.length; i++) {
+            var synEl = originalGetElementById.call(document, sinonimos[i]);
+            if (synEl) return synEl;
+          }
+        }
+      }
+      return null;
+    };
+  })();
+
+  // 2. Disparador Dinâmico para o Relatório de Movimentações
+  function dispararGeracaoMovimentacoes() {
+    console.log("Iniciando varredura para geração do relatório...");
+    var possiveisFuncoes = [
+      "executarRelatorioMovRmb",
+      "gerarRelatorioMovRmb",
+      "gerarMovimentacoes",
+      "executarMovRmb",
+      "filtrarMovimentacoes",
+      "gerarRelatorioMov"
+    ];
+    
+    for (var i = 0; i < possiveisFuncoes.length; i++) {
+      var nomeFuncao = possiveisFuncoes[i];
+      if (typeof window[nomeFuncao] === "function") {
+        try {
+          window[nomeFuncao]();
+          return;
+        } catch (erro) {
+          console.error("Erro interno ao rodar " + nomeFuncao + ":", erro);
+          alert("Erro interno no script de movimentações: " + erro.message);
+          return;
+        }
+      }
+    }
+    alert("Atenção: A função de execução não foi localizada no arquivo de scripts externos.\nAbra o Console (F12) para checar possíveis erros de sintaxe no arquivo.");
+  }
+
+  // 3. Sincronizador de Visibilidade para o Menu do Mapa
+  setInterval(function() {
+    var abasMenuMapa = ["abaMapa", "abaMapaRmb", "abaMapaIntegradoRmb", "abaRelatorioMapa", "abaContabilMapa", "abaRelatorioMapaRmb"];
+    var mapaDeveFicarVisivel = false;
+    for (var i = 0; i < abasMenuMapa.length; i++) {
+      var abaEl = document.getElementById(abasMenuMapa[i]);
+      if (abaEl && !abaEl.classList.contains("hidden")) {
+        mapaDeveFicarVisivel = true;
+        break;
+      }
+    }
+    var painelRealMapa = document.getElementById("containerRealMapaRmb");
+    if (painelRealMapa) {
+      if (mapaDeveFicarVisivel) {
+        painelRealMapa.classList.remove("hidden");
+        painelRealMapa.style.setProperty("display", "block", "important");
+      } else {
+        var outraAbaAtiva = false;
+        document.querySelectorAll("[id^='aba']").forEach(function(el) {
+          if (abasMenuMapa.indexOf(el.id) === -1 && !el.classList.contains("hidden")) {
+            outraAbaAtiva = true;
+          }
+        });
+        if (outraAbaAtiva) {
+          painelRealMapa.classList.add("hidden");
+          painelRealMapa.style.setProperty("display", "none", "important");
+        }
+      }
+    }
+  }, 150);
+</script>
+
+
+<div id="abaContabil" class="container-fluid mt-4 hidden">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
+      <i class="bi bi-file-earmark-bar-graph"></i>
+      <h5 class="mb-0 fw-bold">Relatório de Entradas para o RMB</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Mês das Entradas:</label>
+          <select id="rmbMes" class="form-select">
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Ano:</label>
+          <select id="rmbAno" class="form-select"></select>
+          <script>
+            (function() {
+              var s = document.getElementById("rmbAno");
+              if (s) {
+                var a = new Date().getFullYear();
+                for (var i = a; i >= a - 4; i--) {
+                  var o = document.createElement("option"); o.value = i; o.innerText = i; s.appendChild(o);
+                }
+              }
+            })();
+          </script>
+        </div>
+        <div class="col-md-3">
+          <button id="btnGerarRMB" class="btn btn-success w-100" onclick="gerarRelatorioRMB()">
+            <i class="bi bi-play-circle"></i> Gerar Relatório
+          </button>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+          <button id="btnExportarExcel" class="btn btn-outline-success w-50" onclick="exportarRMBParaExcel()" disabled>
+            <i class="bi bi-file-earmark-excel"></i> Excel
+          </button>
+          <button id="btnExportarPDF" class="btn btn-outline-danger w-50" onclick="exportarRMBParaPDF()" disabled>
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="areaRelatorioRMB"></div>
+</div>
+
+
+<div id="abaRelatorioMovRmb" class="container-fluid mt-4 hidden">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+      <i class="bi bi-arrows-move"></i>
+      <h5 class="mb-0 fw-bold">Relatório de Movimentações para o RMB</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Mês de Referência:</label>
+          <select id="relMovRmbMes" class="form-select">
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Ano:</label>
+          <select id="relMovRmbAno" class="form-select"></select>
+          <script>
+            (function() {
+              var s = document.getElementById("relMovRmbAno");
+              if (s) {
+                var a = new Date().getFullYear();
+                for (var i = a; i >= a - 4; i--) {
+                  var o = document.createElement("option"); o.value = i; o.innerText = i; s.appendChild(o);
+                }
+              }
+            })();
+          </script>
+        </div>
+        <div class="col-md-4">
+          <button id="btnGerarRelMovRmb" class="btn btn-primary w-100" onclick="dispararGeracaoMovimentacoes()">
+            <i class="bi bi-play-circle-fill"></i> Gerar Relatório
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="containerResultadosMovRmb" class="hidden">
+    <div class="d-flex justify-content-end gap-2 mb-3">
+      <button id="btnExportarMovExcel" class="btn btn-success btn-sm" onclick="exportarMovimentacoesExcel()">
+        <i class="bi bi-file-earmark-excel"></i> Exportar Movimentações (Excel)
+      </button>
+      <button id="btnExportarMovPDF" class="btn btn-danger btn-sm" onclick="exportarMovimentacoesPDF()">
+        <i class="bi bi-file-earmark-pdf"></i> Exportar Movimentações (PDF)
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="col-12 mb-4">
+        <div class="card shadow-sm border-secondary">
+          <div class="card-header bg-light fw-bold">
+            <i class="bi bi-list-nested"></i> Detalhamento Analítico de Transferências entre UGs
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table id="tabelaMovAnalitico" class="table table-bordered table-striped table-hover mb-0 align-middle" style="font-size: 11.5px;">
+                <thead class="table-dark text-center">
+                  <tr>
+                    <th>Seq.</th>
+                    <th>Processo</th>
+                    <th class="bg-danger text-white">UG Origem</th>
+                    <th class="bg-danger text-white">NL Saída</th>
+                    <th class="bg-danger text-white">Conta Saída</th>
+                    <th class="bg-danger text-white">Valor Saída</th>
+                    <th class="bg-success text-white">UG Destino</th>
+                    <th class="bg-success text-white">NL Entrada</th>
+                    <th class="bg-success text-white">Conta Entrada</th>
+                    <th class="bg-success text-white">Valor Entrada</th>
+                  </tr>
+                </thead>
+                <tbody id="corpoRelatorioMovAnalitico"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 mb-5">
+        <div class="card shadow-sm border-secondary">
+          <div class="card-header bg-light fw-bold">
+            <i class="bi bi-calculator"></i> Resumo Consolidado por UG e Conta Contábil
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table id="tabelaMovResumo" class="table table-bordered table-striped table-hover mb-0 align-middle" style="font-size: 12.5px;">
+                <thead class="table-dark text-center">
+                  <tr>
+                    <th>Unidade Gestora (UG)</th>
+                    <th>Conta Contábil</th>
+                    <th class="text-success">Total de Entradas (+)</th>
+                    <th class="text-danger">Total de Saídas (-)</th>
+                  </tr>
+                </thead>
+                <tbody id="corpoRelatorioMovResumo"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="abaMapa" class="hidden"></div>
+<div id="abaMapaRmb" class="hidden"></div>
+<div id="abaMapaIntegradoRmb" class="hidden"></div>
+<div id="abaRelatorioMapa" class="hidden"></div>
+<div id="abaContabilMapa" class="hidden"></div>
+<div id="abaRelatorioMapaRmb" class="hidden"></div>
+
+
+<div id="containerRealMapaRmb" class="container-fluid mt-4 hidden" style="display: none;">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+      <i class="bi bi-map-fill"></i>
+      <h5 class="mb-0 fw-bold">Mapa Integrado do RMB</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Mês de Referência:</label>
+          <select id="mapaRmbMes" class="form-select">
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Ano de Referência:</label>
+          <select id="mapaRmbAno" class="form-select"></select>
+          <script>
+            (function() {
+              var s = document.getElementById("mapaRmbAno");
+              if (s) {
+                var a = new Date().getFullYear();
+                for (var i = a; i >= a - 4; i--) {
+                  var o = document.createElement("option"); o.value = i; o.innerText = i; s.appendChild(o);
+                }
+              }
+            })();
+          </script>
+        </div>
+        <div class="col-md-8">
+        <div class="d-flex flex-wrap gap-2 justify-content-md-end justify-content-sm-start">
+          
+          <button id="btnGerarMapaRmb" class="btn btn-dark px-4 py-2 fw-bold shadow-sm" onclick="executarMapaRMB()">
+            <i class="bi bi-play-circle-fill me-2"></i> Gerar Mapa RMB
+          </button>
+          
+          <button id="btnSalvarMapaRmb" class="btn btn-success px-4 py-2 fw-bold shadow-sm" onclick="salvarMapaPlanilha()">
+            <i class="bi bi-cloud-arrow-up-fill me-2"></i> Salvar Fechamento
+          </button>
+          
+          <button id="btnImprimirMapaRmb" class="btn btn-outline-secondary px-4 py-2 fw-bold shadow-sm" onclick="imprimirRelatorioInstitucionalMapa()" disabled>
+            <i class="bi bi-printer-fill me-2"></i> Imprimir Relatório
+          </button>
+          
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="containerMapaRmb" class="card shadow-sm mb-4 hidden">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover align-middle" id="tabelaMapaRmb" style="font-size: 12px;">
+          <thead class="table-dark text-center">
+            <tr>
+              <th rowspan="2" class="align-middle">Conta Contábil</th>
+              <th rowspan="2" class="align-middle">Saldo Inicial</th>
+              <th colspan="4" class="bg-success text-white">Entradas do Período</th>
+              <th colspan="3" class="bg-danger text-white">Saídas do Período (Módulo Futuro)</th>
+              <th rowspan="2" class="align-middle">Saldo Atual</th>
+            </tr>
+            <tr>
+              <th class="bg-success text-white">Empenho</th>
+              <th class="bg-success text-white">Edital Interno</th>
+              <th class="bg-success text-white">Outras Entradas</th>
+              <th class="bg-success text-white">Total Entradas</th>
+              <th class="bg-danger text-white">Transferências</th>
+              <th class="bg-danger text-white">Outras Saídas</th>
+              <th class="bg-danger text-white">Total Saídas</th>
+            </tr>
+          </thead>
+          <tbody id="corpoMapaRmb"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="abaImportarRmbSiads" class="container-fluid mt-4 hidden">
+  <div class="container-fluid mt-3">
+    <h4>📊 Contábil > Importar RMB do SIADS</h4>
+    <p class="text-muted">Faça o upload do relatório TXT do SIADS para processamento e consolidação de saldos e depreciações.</p>
+
+    <div class="card mb-4 border-primary shadow-sm">
+      <div class="card-header bg-primary text-white font-weight-bold">Parâmetros de Importação</div>
+      <div class="card-body">
+        <form id="formImportarRmb" onsubmit="event.preventDefault(); processarArquivoRmb();">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">Período de Referência</label>
+              <input type="month" id="rmbReferencia" class="form-control" required>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">UG (Unidade Gestora)</label>
+              <input type="text" id="rmbUg" class="form-control" required placeholder="Ex: 153105">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold">Arquivo do RMB (.txt)</label>
+              <input type="file" id="rmbArquivo" class="form-control-file" accept=".txt" required>
+            </div>
+          </div>
+          <div class="text-right">
+            <button type="submit" class="btn btn-success font-weight-bold px-4">Processar e Importar 🚀</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ABA DE IMPORTAÇÃO DE TRANSFERÊNCIAS INTERNAS -->
+<div id="abaImportarTransfInterna" class="container-fluid mt-4 hidden">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
+      <i class="bi bi-file-earmark-arrow-up-fill"></i>
+      <h5 class="mb-0 fw-bold">Importar Transferências Internas (Razão Bens Móveis)</h5>
+    </div>
+    <div class="card-body">
+      <form id="formImportarTransf" onsubmit="event.preventDefault(); processarArquivoTransf();">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-8">
+            <label class="form-label fw-bold">Selecione a Planilha (.xlsx):</label>
+            <input type="file" id="arquivoTransf" class="form-control" accept=".xlsx, .xls" required>
+          </div>
+          <div class="col-md-4">
+            <button type="submit" id="btnProcessarTransf" class="btn btn-success w-100 fw-bold">
+              <i class="bi bi-gear-fill me-1"></i> Processar Planilha
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CONTAINER DE RESULTADOS -->
+  <div id="containerResultadosTransf" class="card shadow-sm border-secondary hidden">
+    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-table me-2"></i> Relatório Consolidado de Transferências Internas</span>
+      <span id="totalTransfBadge" class="badge bg-primary"></span>
+    </div>
+    <!-- Botão de Gravação -->
+    <button id="btnSalvarTransf" class="btn btn-success fw-bold shadow-sm" onclick="salvarTransfNoDocumento()">
+      <i class="bi bi-save-fill me-1"></i> Gravar em DOCUMENTO_MOVIMENTO
+    </button>
+  </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover mb-0 align-middle" style="font-size: 12px;">
+          <thead class="table-dark text-center">
+            <tr>
+              <th rowspan="2" class="align-middle">Nº Doc. Transferência</th>
+              <th colspan="4" class="bg-danger text-white">Documento de Saída</th>
+              <th colspan="4" class="bg-success text-white">Documento de Entrada</th>
+            </tr>
+            <tr>
+              <th class="bg-danger text-white">NL Saída</th>
+    <th class="bg-danger text-white">Conta Contábil</th>
+    <th class="bg-danger text-white">UG Executora</th>
+    <th class="bg-danger text-white">Valor (R$)</th>
+    <th class="bg-success text-white">NL Entrada</th>
+    <th class="bg-success text-white">Conta Contábil</th>
+    <th class="bg-success text-white">UG Executora</th>
+    <th class="bg-success text-white">Valor (R$)</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabelaTransf"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
