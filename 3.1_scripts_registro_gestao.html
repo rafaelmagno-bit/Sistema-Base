@@ -1,0 +1,198 @@
+<script>
+  const MENSAGEM_BLOQUEIO_ADMIN = "Esta ação somente poderá ser realizada por usuários com o perfil ADMIN.";
+  let cacheConsultaEntradas = [];
+  let perfilAtualGestaoEntradas = "VISUALIZADOR";
+
+  function pesquisarEntradas() {
+    const filtros = {
+      dataInicio: document.getElementById("filtroEntDataInicio").value,
+      dataFim: document.getElementById("filtroEntDataFim").value,
+      usuario: document.getElementById("filtroEntUsuario").value,
+      sequencial: document.getElementById("filtroEntSequencial").value,
+      processo: document.getElementById("filtroEntProcesso").value
+    };
+
+    if (typeof mostrarLoader === "function") mostrarLoader();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        if (!res.sucesso) {
+          alert("Erro ao pesquisar: " + res.message);
+          return;
+        }
+        cacheConsultaEntradas = res.registros;
+        perfilAtualGestaoEntradas = res.perfil;
+        renderizarTabelaEntradas(res.registros, res.perfil);
+      })
+      .withFailureHandler(function(err) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        alert("Falha de comunicação: " + err.message);
+      })
+      .consultarEntradasFiltradas(filtros);
+  }
+
+  function renderizarTabelaEntradas(lista, perfil) {
+    const tbody = document.getElementById("tabelaResultadosEntradas");
+    if (!lista || lista.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro encontrado para os filtros informados.</td></tr>';
+      return;
+    }
+
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth();
+    const anoAtual = hoje.getFullYear();
+
+    tbody.innerHTML = lista.map((item, index) => {
+      const estaAnulado = item.status.startsWith("ANULADO");
+      const ehMesCorrente = (item.mesRegistro === mesAtual && item.anoRegistro === anoAtual);
+
+      // Regras visuais dos botões (mantendo clique ativo para disparar o alerta de permissão)
+      const podeAlterar = !estaAnulado && (ehMesCorrente || perfil === "ADMIN");
+      const podeAnular = !estaAnulado && (perfil === "ADMIN");
+
+      const classeBtnAlterar = podeAlterar ? "btn-warning" : "btn-outline-secondary";
+      const classeBtnAnular = podeAnular ? "btn-danger" : "btn-outline-secondary";
+
+      const badgeStatus = estaAnulado
+        ? `<span class="badge badge-danger" title="${item.status}">ANULADO</span>`
+        : `<span class="badge badge-success">ATIVO</span>`;
+
+      return `
+        <tr class="${estaAnulado ? 'table-secondary text-muted' : ''}">
+          <td><strong>${item.sequencial}</strong></td>
+          <td>${item.dataRegistroFmt}</td>
+          <td>${item.processo}</td>
+          <td>${item.tipo}</td>
+          <td>${item.ug} / ${item.uorg}</td>
+          <td><small>${item.usuario}</small></td>
+          <td class="text-center">${item.qtdItens}</td>
+          <td class="text-center">${badgeStatus}</td>
+          <td class="text-center">
+            <button type="button" class="btn btn-sm ${classeBtnAlterar}"
+                    onclick="tentarAlterarEntrada(${index})" ${estaAnulado ? 'disabled' : ''}>
+              Alterar
+            </button>
+            <button type="button" class="btn btn-sm ${classeBtnAnular}"
+                    onclick="tentarAnularEntrada('${item.sequencial}')" ${estaAnulado ? 'disabled' : ''}>
+              Anular
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function tentarAlterarEntrada(index) {
+    const item = cacheConsultaEntradas[index];
+    if (!item) return;
+
+    const hoje = new Date();
+    const ehMesCorrente = (item.mesRegistro === hoje.getMonth() && item.anoRegistro === hoje.getFullYear());
+
+    // Regra: Meses anteriores somente ADMIN pode alterar
+    if (!ehMesCorrente && perfilAtualGestaoEntradas !== "ADMIN") {
+      alert(MENSAGEM_BLOQUEIO_ADMIN);
+      return;
+    }
+
+    if (perfilAtualGestaoEntradas === "VISUALIZADOR") {
+      alert(MENSAGEM_BLOQUEIO_ADMIN);
+      return;
+    }
+
+    // Abre o modal preenchido
+    document.getElementById("editEntSeqTitulo").innerText = item.sequencial;
+    document.getElementById("editEntSequencial").value = item.sequencial;
+    document.getElementById("editEntProcesso").value = item.processo;
+    document.getElementById("editEntTipo").value = item.tipo;
+    document.getElementById("editEntDataDoc").value = item.dataDocISO;
+    document.getElementById("editEntUg").value = item.ug;
+    document.getElementById("editEntUorg").value = item.uorg;
+
+    const modal = document.getElementById("modalEditarEntrada");
+    modal.style.display = "block";
+    modal.classList.add("show");
+  }
+
+  function fecharModalEdicaoEntrada() {
+    const modal = document.getElementById("modalEditarEntrada");
+    modal.style.display = "none";
+    modal.classList.remove("show");
+  }
+
+  function salvarAlteracaoEntrada() {
+    const payload = {
+      sequencial: document.getElementById("editEntSequencial").value,
+      processo: document.getElementById("editEntProcesso").value.trim(),
+      tipo: document.getElementById("editEntTipo").value.trim(),
+      dataDoc: document.getElementById("editEntDataDoc").value,
+      ug: document.getElementById("editEntUg").value.trim(),
+      uorg: document.getElementById("editEntUorg").value.trim()
+    };
+
+    if (typeof mostrarLoader === "function") mostrarLoader();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        if (!res.sucesso) {
+          alert(res.message);
+          return;
+        }
+        fecharModalEdicaoEntrada();
+        alert(res.message);
+        pesquisarEntradas();
+      })
+      .withFailureHandler(function(err) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        alert("Erro ao salvar: " + err.message);
+      })
+      .alterarEntradaRegistro(payload);
+  }
+
+  function tentarAnularEntrada(sequencial) {
+    // Regra: Anular é exclusivo para ADMIN
+    if (perfilAtualGestaoEntradas !== "ADMIN") {
+      alert(MENSAGEM_BLOQUEIO_ADMIN);
+      return;
+    }
+
+    const motivo = prompt(`Informe o motivo para ANULAR a entrada ${sequencial}:`);
+    if (motivo === null) return; // Usuário cancelou
+    if (motivo.trim().length < 5) {
+      alert("Por favor, informe um motivo válido (mínimo 5 caracteres).");
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja ANULAR permanentemente a entrada ${sequencial}?`)) return;
+
+    if (typeof mostrarLoader === "function") mostrarLoader();
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        if (!res.sucesso) {
+          alert(res.message);
+          return;
+        }
+        alert(res.message);
+        pesquisarEntradas();
+      })
+      .withFailureHandler(function(err) {
+        if (typeof esconderLoader === "function") esconderLoader();
+        alert("Erro ao anular: " + err.message);
+      })
+      .anularEntradaRegistro(sequencial, motivo);
+  }
+
+  function limparFiltrosEntrada() {
+    document.getElementById("filtroEntDataInicio").value = "";
+    document.getElementById("filtroEntDataFim").value = "";
+    document.getElementById("filtroEntUsuario").value = "";
+    document.getElementById("filtroEntSequencial").value = "";
+    document.getElementById("filtroEntProcesso").value = "";
+    document.getElementById("tabelaResultadosEntradas").innerHTML =
+      '<tr><td colspan="9" class="text-center text-muted py-4">Utilize os filtros acima para pesquisar entradas.</td></tr>';
+  }
+</script>

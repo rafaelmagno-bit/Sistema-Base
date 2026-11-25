@@ -1,0 +1,109 @@
+<div id="abaGestaoEntradas" class="tab-content hidden">
+  <div class="container-fluid mt-3">
+    <h4>📋 Consultar, Alterar ou Anular Entradas</h4>
+    <p class="text-muted">Pesquise registros de entrada por período, usuário, sequencial ou processo.</p>
+
+    <!-- CARD DE FILTROS -->
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-light font-weight-bold">Filtros de Pesquisa</div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-2 mb-2">
+            <label>Data Registro (De)</label>
+            <input type="date" id="filtroEntDataInicio" class="form-control">
+          </div>
+          <div class="col-md-2 mb-2">
+            <label>Data Registro (Até)</label>
+            <input type="date" id="filtroEntDataFim" class="form-control">
+          </div>
+          <div class="col-md-3 mb-2">
+            <label>Usuário (E-mail ou Nome)</label>
+            <input type="text" id="filtroEntUsuario" class="form-control" placeholder="Ex: nome@ufpe.br">
+          </div>
+          <div class="col-md-2 mb-2">
+            <label>Sequencial</label>
+            <input type="text" id="filtroEntSequencial" class="form-control" maxlength="10"
+                   placeholder="Ex: 2026000001" oninput="this.value = this.value.replace(/\D/g, '')">
+          </div>
+          <div class="col-md-3 mb-2">
+            <label>Nº do Processo</label>
+            <input type="text" id="filtroEntProcesso" class="form-control" placeholder="Ex: 23076.000000/2026-00">
+          </div>
+        </div>
+        <div class="mt-2 text-right">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="limparFiltrosEntrada()">Limpar</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="pesquisarEntradas()">🔍 Pesquisar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABELA DE RESULTADOS -->
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover table-bordered mb-0">
+            <thead class="thead-dark">
+              <tr>
+                <th>Sequencial</th>
+                <th>Data Registro</th>
+                <th>Processo</th>
+                <th>Tipo</th>
+                <th>UG / UORG</th>
+                <th>Usuário</th>
+                <th>Itens</th>
+                <th>Status</th>
+                <th class="text-center" style="width: 190px;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaResultadosEntradas">
+              <tr>
+                <td colspan="9" class="text-center text-muted py-4">Utilize os filtros acima para pesquisar entradas.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DE EDIÇÃO DE ENTRADA -->
+<div id="modalEditarEntrada" class="modal fade" tabindex="-1" role="dialog" style="background: rgba(0,0,0,0.5);">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">✏️ Alterar Entrada - Seq: <span id="editEntSeqTitulo"></span></h5>
+        <button type="button" class="close" onclick="fecharModalEdicaoEntrada()"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editEntSequencial">
+        <div class="form-group">
+          <label>Nº do Processo</label>
+          <input type="text" id="editEntProcesso" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Tipo de Entrada</label>
+          <input type="text" id="editEntTipo" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Data do Documento</label>
+          <input type="date" id="editEntDataDoc" class="form-control">
+        </div>
+        <div class="row">
+          <div class="col-md-6 form-group">
+            <label>UG</label>
+            <input type="text" id="editEntUg" class="form-control">
+          </div>
+          <div class="col-md-6 form-group">
+            <label>UORG</label>
+            <input type="text" id="editEntUorg" class="form-control">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="fecharModalEdicaoEntrada()">Cancelar</button>
+        <button type="button" class="btn btn-success" onclick="salvarAlteracaoEntrada()">💾 Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+</div>
