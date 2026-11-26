@@ -1490,11 +1490,11 @@ function adicionarNotaFiscal() {
     </div>
     
     <div class="grid" style="grid-template-columns: 1.5fr 2.5fr 1fr 1fr; margin-bottom: 15px;">
-      <div><label>Nº Documento/NF</label><input class="nf-numero" placeholder="Ex: 123.456"></div>
-      <div><label>Fornecedor</label><input class="nf-fornecedor" placeholder="Razão Social"></div>
-      <div><label>Vlr. Frete</label><input class="nf-frete" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); atualizarResumoTotal()"></div>
-      <div><label>Vlr. Total NF</label><input class="nf-total" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this)"></div>
-    </div>
+  <div><label>Nº Documento/NF <span class="obrigatorio">*</span></label><input class="nf-numero" placeholder="Ex: 123.456"></div>
+  <div><label>Fornecedor <span class="obrigatorio">*</span></label><input class="nf-fornecedor" placeholder="Razão Social"></div>
+  <div><label>Vlr. Frete</label><input class="nf-frete" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); atualizarResumoTotal()"></div>
+  <div><label>Vlr. Total NF <span class="obrigatorio">*</span></label><input class="nf-total" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this)"></div>
+</div>
 
     <div class="sub-itens-container" style="border-left: 4px solid #1F4E78; padding-left: 15px; margin-top: 10px;">
       <div class="lista-itens-nota"></div>
@@ -1544,13 +1544,13 @@ function adicionarItemNaNota(botao) {
 
     <div class="grid-qtd-valores" style="display: grid; grid-template-columns: 80px 1fr 1fr 1.2fr; gap: 10px; margin-top:10px;">
       <div>
-        <label>Qtd</label>
-        <input type="number" class="qtd" value="1" min="1" oninput="recalcularRateioFrete()">
-      </div>
-      <div>
-        <label>Vlr. Unitário</label>
-        <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete()">
-      </div>
+  <label>Qtd <span class="obrigatorio">*</span></label>
+  <input type="number" class="qtd" value="1" min="1" oninput="atualizarItem(this)">
+</div>
+<div>
+  <label>Valor Unitário <span class="obrigatorio">*</span></label>
+  <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete();">
+</div>
       <div>
         <label>Rateio Frete (Unit.)</label>
         <div class="vlr-rateio badge-rateio" style="background:#f0f0f0; padding:8px; border-radius:4px; font-size:0.9rem;">R$ 0,00</div>
