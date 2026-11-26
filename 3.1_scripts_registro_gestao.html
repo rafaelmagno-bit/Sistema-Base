@@ -83,43 +83,197 @@
     }).join("");
   }
 
-  function tentarAlterarEntrada(index) {
-    const item = cacheConsultaEntradas[index];
-    if (!item) return;
+  let sequencialEmEdicao = null; // Variável global que indica se #abaCadastro está editando
 
-    const hoje = new Date();
-    const ehMesCorrente = (item.mesRegistro === hoje.getMonth() && item.anoRegistro === hoje.getFullYear());
+function tentarAlterarEntrada(index) {
+  const item = cacheConsultaEntradas[index];
+  if (!item) return;
 
-    // Regra: Meses anteriores somente ADMIN pode alterar
-    if (!ehMesCorrente && perfilAtualGestaoEntradas !== "ADMIN") {
-      alert(MENSAGEM_BLOQUEIO_ADMIN);
-      return;
-    }
+  const hoje = new Date();
+  const ehMesCorrente = (item.mesRegistro === hoje.getMonth() && item.anoRegistro === hoje.getFullYear());
 
-    if (perfilAtualGestaoEntradas === "VISUALIZADOR") {
-      alert(MENSAGEM_BLOQUEIO_ADMIN);
-      return;
-    }
-
-    // Abre o modal preenchido
-    document.getElementById("editEntSeqTitulo").innerText = item.sequencial;
-    document.getElementById("editEntSequencial").value = item.sequencial;
-    document.getElementById("editEntProcesso").value = item.processo;
-    document.getElementById("editEntTipo").value = item.tipo;
-    document.getElementById("editEntDataDoc").value = item.dataDocISO;
-    document.getElementById("editEntUg").value = item.ug;
-    document.getElementById("editEntUorg").value = item.uorg;
-
-    const modal = document.getElementById("modalEditarEntrada");
-    modal.style.display = "block";
-    modal.classList.add("show");
+  if ((!ehMesCorrente && perfilAtualGestaoEntradas !== "ADMIN") || perfilAtualGestaoEntradas === "VISUALIZADOR") {
+    alert(MENSAGEM_BLOQUEIO_ADMIN);
+    return;
   }
+
+  if (typeof mostrarLoader === "function") mostrarLoader();
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (typeof esconderLoader === "function") esconderLoader();
+      if (!res.sucesso) {
+        alert(res.message);
+        return;
+      }
+      abrirCadastroParaEdicao(res.dados);
+    })
+    .withFailureHandler(function(err) {
+      if (typeof esconderLoader === "function") esconderLoader();
+      alert("Erro ao carregar dados para edição: " + err.message);
+    })
+    .obterEntradaCompletaParaEdicao(item.sequencial);
+}
+
+function abrirCadastroParaEdicao(dados) {
+  sequencialEmEdicao = dados.sequencial;
+
+  // 1. Navega para a tela de Cadastro
+  mostrarAba('cadastro');
+
+  // 2. Ajusta título e botão principal
+  const tituloCadastro = document.querySelector("#abaCadastro .cadastro-header h2");
+  if (tituloCadastro) {
+    tituloCadastro.innerHTML = `✏️ Alterando Entrada — Sequencial: <span style="color:#d9534f;">${dados.sequencial}</span>`;
+  }
+  const btnSalvar = document.getElementById("btnSalvar");
+  if (btnSalvar) {
+    btnSalvar.innerHTML = "💾 SALVAR ALTERAÇÕES";
+    btnSalvar.style.background = "#e67e22";
+  }
+
+  // 3. Limpa os inputs de #abaCadastro de forma segura (sem quebrar no #listaItens)
+  document.querySelectorAll("#abaCadastro input, #abaCadastro textarea").forEach(el => {
+    if (el.type !== "button") el.value = "";
+  });
+
+  // 4. Preenche Seção 1: Dados do Processo
+  const selectTipo = document.getElementById("tipo");
+  if (selectTipo) {
+    if (dados.tipo && ![...selectTipo.options].some(o => o.value === dados.tipo)) {
+      selectTipo.innerHTML += `<option value="${dados.tipo}">${dados.tipo}</option>`;
+    }
+    selectTipo.value = dados.tipo || "";
+    if (typeof ajustarCamposCondicionais === "function") ajustarCamposCondicionais();
+  }
+
+  if (document.getElementById("processo")) document.getElementById("processo").value = dados.processo || "";
+  if (document.getElementById("data")) document.getElementById("data").value = dados.dataProcesso || "";
+
+  // UG e UORG
+  if (document.getElementById("ug")) document.getElementById("ug").value = dados.ug || "";
+  if (document.getElementById("buscaUg")) document.getElementById("buscaUg").value = dados.ug || "";
+  if (document.getElementById("uorg")) document.getElementById("uorg").value = dados.uorg || "";
+  const buscaUorg = document.getElementById("buscaUorg");
+  if (buscaUorg) {
+    buscaUorg.disabled = false;
+    buscaUorg.value = dados.uorg || "";
+  }
+
+  // 5. Preenche Seção 2: Campos Específicos
+  const camposSecao2 = {
+    empenho: dados.empenho,
+    ugEmpenho: dados.ugEmpenho,
+    buscaUgEmpenho: dados.ugEmpenho,
+    edital: dados.edital,
+    beneficiario: dados.beneficiario,
+    cpf: dados.cpf,
+    siape: dados.siape,
+    fade: dados.fade
+  };
+  Object.keys(camposSecao2).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = camposSecao2[id] || "";
+  });
+
+  // 6. Preenche Seção 3: Corresponsável (IDs exatos do 3_scripts.html)
+  const camposCorresp = {
+    nomeServidor: dados.corresponsavel,
+    buscaServidor: dados.corresponsavel,
+    cpfServidor: dados.cpfCorresp,
+    siapeServidor: dados.siapeCorresp
+  };
+  Object.keys(camposCorresp).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = camposCorresp[id] || "";
+  });
+
+  // 7. Reconstrói as Notas Fiscais e Itens
+  const containerNFs = document.getElementById("containerNotasFiscais");
+  if (containerNFs && typeof adicionarNotaFiscal === "function") {
+    containerNFs.innerHTML = "";
+    if (typeof contadorNotas !== "undefined") contadorNotas = 0;
+
+    const listaNFs = (dados.notasFiscais && dados.notasFiscais.length > 0)
+      ? dados.notasFiscais
+      : [{ numero: "", fornecedor: "", frete: 0, totalNF: 0, itens: [] }];
+
+    listaNFs.forEach(nf => {
+      adicionarNotaFiscal();
+
+      const blocos = containerNFs.querySelectorAll(".nota-fiscal-bloco");
+      const blocoAtual = blocos[blocos.length - 1];
+      if (!blocoAtual) return;
+
+      const vlrFreteNF = Number(nf.frete || 0);
+      if (blocoAtual.querySelector(".nf-numero")) blocoAtual.querySelector(".nf-numero").value = nf.numero || "";
+      if (blocoAtual.querySelector(".nf-fornecedor")) blocoAtual.querySelector(".nf-fornecedor").value = nf.fornecedor || "";
+      if (blocoAtual.querySelector(".nf-frete")) {
+        blocoAtual.querySelector(".nf-frete").value = vlrFreteNF.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      }
+      if (blocoAtual.querySelector(".nf-total")) {
+        blocoAtual.querySelector(".nf-total").value = Number(nf.totalNF || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      }
+
+      const listaItensDiv = blocoAtual.querySelector(".lista-itens-nota");
+      const btnAddItem = blocoAtual.querySelector(".sub-itens-container .btn-adicionar");
+
+      if (listaItensDiv && btnAddItem && nf.itens && nf.itens.length > 0) {
+        listaItensDiv.innerHTML = "";
+
+        // Calcula o frete unitário salvo na planilha para descontar do valor unitário bruto
+        const totalUnidadesNF = nf.itens.reduce((acc, item) => acc + (Number(item.qtd) || 0), 0);
+        const freteUnitarioSalvo = (vlrFreteNF > 0 && totalUnidadesNF > 0) ? (vlrFreteNF / totalUnidadesNF) : 0;
+
+        nf.itens.forEach(it => {
+          adicionarItemNaNota(btnAddItem);
+          const cards = listaItensDiv.querySelectorAll(".item-card");
+          const card = cards[cards.length - 1];
+          if (!card) return;
+
+          const campoDesc = card.querySelector(".cadmat-desc");
+          if (campoDesc) {
+            campoDesc.value = it.cadmat ? `${it.cadmat} - ${it.descricao}` : (it.descricao || "");
+            campoDesc.dataset.codigo = it.cadmat || "";
+            campoDesc.dataset.descricao = it.descricao || "";
+          }
+
+          if (card.querySelector(".info")) card.querySelector(".info").value = it.marca || "";
+
+          const selectConta = card.querySelector(".conta");
+          if (selectConta && it.conta) {
+            if (![...selectConta.options].some(o => o.value === it.conta)) {
+              selectConta.innerHTML += `<option value="${it.conta}">${it.conta}</option>`;
+            }
+            selectConta.value = it.conta;
+          }
+
+          if (card.querySelector(".qtd")) card.querySelector(".qtd").value = it.qtd || 1;
+
+          // Desconta o rateio de frete para preencher o valor unitário puro da NF
+          const valorUnitPuro = Math.max(0, Number(it.valorUnit || 0) - freteUnitarioSalvo);
+          const campoValor = card.querySelector(".valor");
+          if (campoValor) {
+            campoValor.value = valorUnitPuro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          }
+        });
+      }
+    });
+
+    // Chama a função oficial do 3_scripts.html que calcula rateio, total do item e total geral
+    if (typeof recalcularRateioFrete === "function") {
+      recalcularRateioFrete();
+    }
+  }
+    if (typeof atualizarResumoTotal === "function") atualizarResumoTotal();
+  }
+
 
   function fecharModalEdicaoEntrada() {
-    const modal = document.getElementById("modalEditarEntrada");
-    modal.style.display = "none";
-    modal.classList.remove("show");
-  }
+  const modal = document.getElementById("modalEditarEntrada");
+  modal.style.display = "none";
+  modal.classList.add("hidden");
+}
 
   function salvarAlteracaoEntrada() {
     const payload = {
@@ -195,4 +349,5 @@
     document.getElementById("tabelaResultadosEntradas").innerHTML =
       '<tr><td colspan="9" class="text-center text-muted py-4">Utilize os filtros acima para pesquisar entradas.</td></tr>';
   }
+  
 </script>

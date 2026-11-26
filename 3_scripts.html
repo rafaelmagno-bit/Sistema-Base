@@ -871,6 +871,33 @@ function salvar() {
 
   // 🔴 A TRAVA DA NOTA OBRIGATÓRIA FOI REMOVIDA DAQUI! 🔴
 
+  // Dentro da função salvar() em 3_scripts.html, após montar o objeto `payload`:
+if (typeof sequencialEmEdicao !== "undefined" && sequencialEmEdicao) {
+  payload.sequencial = sequencialEmEdicao;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      esconderLoader();
+      btn.disabled = false;
+      if (res.status === "ok") {
+        alert("✅ " + res.message);
+        sairModoEdicaoCadastro();
+        mostrarAba('gestaoEntradas');
+        pesquisarEntradas();
+      } else {
+        alert("❌ Erro ao atualizar: " + res.message);
+      }
+    })
+    .withFailureHandler(function(err) {
+      esconderLoader();
+      btn.disabled = false;
+      alert("Falha de comunicação: " + err.message);
+    })
+    .salvarEdicaoCompletaEntrada(payload);
+
+  return; // Interrompe para não criar um novo sequencial via salvarDados()
+}
+
   mostrarLoader();
   google.script.run
     .withSuccessHandler(resp => {
@@ -891,6 +918,18 @@ function salvar() {
       abrirModal("Erro", err.message);
     })
     .salvarDados(dados);
+}
+
+function sairModoEdicaoCadastro() {
+  sequencialEmEdicao = null;
+  const tituloCadastro = document.querySelector("#abaCadastro .cadastro-header h2");
+  if (tituloCadastro) tituloCadastro.innerHTML = "Novo Cadastro de Entrada";
+
+  const btnSalvar = document.getElementById("btnSalvar");
+  if (btnSalvar) {
+    btnSalvar.innerHTML = "🚀 FINALIZAR CADASTRO";
+    btnSalvar.style.background = "#28a745";
+  }
 }
 
 function calcularIntervaloTomboDinamico(inputInicial, qtd) {
@@ -1064,7 +1103,8 @@ function limparFormulario() {
   if (resUorg) resUorg.innerHTML = "";
 
   // 🔹 limpa itens
-  document.getElementById("listaItens").innerHTML = "";
+  const elListaItens = document.getElementById("listaItens");
+if (elListaItens) elListaItens.innerHTML = "";
 
   // 🔹 zera totais
   document.getElementById("quantidadeTotal").innerText = "0";
@@ -1088,6 +1128,11 @@ if (resUgEmpenho) resUgEmpenho.innerHTML = "";
 
 // Adicione esta linha exatamente no fim da sua função limparFormulario():
 ajustarCamposCondicionais();
+
+// No final da função limparFormulario() em 3_scripts.html:
+if (typeof sairModoEdicaoCadastro === "function") {
+  sairModoEdicaoCadastro();
+}
 
 }
 

@@ -1,109 +1,85 @@
-<div id="abaGestaoEntradas" class="tab-content hidden">
-  <div class="container-fluid mt-3">
-    <h4>📋 Consultar, Alterar ou Anular Entradas</h4>
-    <p class="text-muted">Pesquise registros de entrada por período, usuário, sequencial ou processo.</p>
+<div id="abaGestaoEntradas" class="hidden">
+  <div class="cadastro-header">
+    <div>
+      <h2>📋 Consultar, Alterar ou Anular Entradas</h2>
+      <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #666;">
+        Pesquise registros de entrada por período, usuário, sequencial ou processo.
+      </p>
+    </div>
+  </div>
 
-    <!-- CARD DE FILTROS -->
-    <div class="card mb-4 shadow-sm">
-      <div class="card-header bg-light font-weight-bold">Filtros de Pesquisa</div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-2 mb-2">
-            <label>Data Registro (De)</label>
-            <input type="date" id="filtroEntDataInicio" class="form-control">
-          </div>
-          <div class="col-md-2 mb-2">
-            <label>Data Registro (Até)</label>
-            <input type="date" id="filtroEntDataFim" class="form-control">
-          </div>
-          <div class="col-md-3 mb-2">
-            <label>Usuário (E-mail ou Nome)</label>
-            <input type="text" id="filtroEntUsuario" class="form-control" placeholder="Ex: nome@ufpe.br">
-          </div>
-          <div class="col-md-2 mb-2">
-            <label>Sequencial</label>
-            <input type="text" id="filtroEntSequencial" class="form-control" maxlength="10"
-                   placeholder="Ex: 2026000001" oninput="this.value = this.value.replace(/\D/g, '')">
-          </div>
-          <div class="col-md-3 mb-2">
-            <label>Nº do Processo</label>
-            <input type="text" id="filtroEntProcesso" class="form-control" placeholder="Ex: 23076.000000/2026-00">
-          </div>
-        </div>
-        <div class="mt-2 text-right">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="limparFiltrosEntrada()">Limpar</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="pesquisarEntradas()">🔍 Pesquisar</button>
-        </div>
+  <!-- CARD DE FILTROS -->
+  <div class="card">
+    <div class="section-title" style="margin-top: 0;">Filtros de Pesquisa</div>
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
+      <div>
+        <label for="filtroEntDataInicio">Data Registro (De)</label>
+        <input type="date" id="filtroEntDataInicio">
+      </div>
+
+      <div>
+        <label for="filtroEntDataFim">Data Registro (Até)</label>
+        <input type="date" id="filtroEntDataFim">
+      </div>
+
+      <div>
+        <label for="filtroEntUsuario">Usuário (E-mail ou Nome)</label>
+        <input type="text" id="filtroEntUsuario" placeholder="Ex: nome@ufpe.br">
+      </div>
+
+      <div>
+        <label for="filtroEntSequencial">Sequencial</label>
+        <input type="text" id="filtroEntSequencial" maxlength="10"
+               placeholder="Ex: 2026000001"
+               oninput="this.value = this.value.replace(/\D/g, '')">
+      </div>
+
+      <div>
+        <label for="filtroEntProcesso">Nº do Processo</label>
+        <input type="text" id="filtroEntProcesso" placeholder="Ex: 23076.000000/2026-00">
       </div>
     </div>
 
-    <!-- TABELA DE RESULTADOS -->
-    <div class="card shadow-sm">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover table-bordered mb-0">
-            <thead class="thead-dark">
-              <tr>
-                <th>Sequencial</th>
-                <th>Data Registro</th>
-                <th>Processo</th>
-                <th>Tipo</th>
-                <th>UG / UORG</th>
-                <th>Usuário</th>
-                <th>Itens</th>
-                <th>Status</th>
-                <th class="text-center" style="width: 190px;">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="tabelaResultadosEntradas">
-              <tr>
-                <td colspan="9" class="text-center text-muted py-4">Utilize os filtros acima para pesquisar entradas.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid #eee;">
+      <button type="button" onclick="limparFiltrosEntrada()"
+              style="background: #6c757d; color: white; border: none; padding: 8px 18px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">
+        🧹 Limpar
+      </button>
+      <button type="button" onclick="pesquisarEntradas()"
+              style="background: #1F4E78; color: white; border: none; padding: 8px 22px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px;">
+        🔍 Pesquisar
+      </button>
+    </div>
+  </div>
+
+  <!-- TABELA DE RESULTADOS -->
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div style="overflow-x: auto;">
+      <table style="margin-top: 0;">
+        <thead>
+          <tr>
+            <th>Sequencial</th>
+            <th>Data Registro</th>
+            <th>Processo</th>
+            <th>Tipo</th>
+            <th>UG / UORG</th>
+            <th>Usuário</th>
+            <th style="text-align: center;">Itens</th>
+            <th style="text-align: center;">Status</th>
+            <th style="text-align: center; width: 170px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaResultadosEntradas">
+          <tr>
+            <td colspan="9" style="text-align: center; color: #666; padding: 24px;">
+              Utilize os filtros acima para pesquisar entradas.
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- MODAL DE EDIÇÃO DE ENTRADA -->
-<div id="modalEditarEntrada" class="modal fade" tabindex="-1" role="dialog" style="background: rgba(0,0,0,0.5);">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header bg-warning text-dark">
-        <h5 class="modal-title">✏️ Alterar Entrada - Seq: <span id="editEntSeqTitulo"></span></h5>
-        <button type="button" class="close" onclick="fecharModalEdicaoEntrada()"><span>&times;</span></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="editEntSequencial">
-        <div class="form-group">
-          <label>Nº do Processo</label>
-          <input type="text" id="editEntProcesso" class="form-control">
-        </div>
-        <div class="form-group">
-          <label>Tipo de Entrada</label>
-          <input type="text" id="editEntTipo" class="form-control">
-        </div>
-        <div class="form-group">
-          <label>Data do Documento</label>
-          <input type="date" id="editEntDataDoc" class="form-control">
-        </div>
-        <div class="row">
-          <div class="col-md-6 form-group">
-            <label>UG</label>
-            <input type="text" id="editEntUg" class="form-control">
-          </div>
-          <div class="col-md-6 form-group">
-            <label>UORG</label>
-            <input type="text" id="editEntUorg" class="form-control">
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="fecharModalEdicaoEntrada()">Cancelar</button>
-        <button type="button" class="btn btn-success" onclick="salvarAlteracaoEntrada()">💾 Salvar Alterações</button>
-      </div>
-    </div>
-  </div>
-</div>
+
