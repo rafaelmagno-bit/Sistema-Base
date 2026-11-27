@@ -280,59 +280,74 @@ function buscarUgEmpenhoDinamico(valorBusca) {
   });
 }
 
-// ================= FUNÇÕES DO ORGANOGRAMA VINCULADO (UORG) =================
-
+// ================= FUNÇÕES DO ORGANOGRAMA (UORG -> PREENCHE UG AUTOMATICAMENTE) =================
 function buscarUorgDinamico(valorBusca) {
-  const inputRealUg = document.getElementById("ug");
   const containerResultados = document.getElementById("resultadoBuscaUorg");
   const inputRealUorg = document.getElementById("uorg");
-  
-  if (!inputRealUg || !containerResultados) return;
-  containerResultados.innerHTML = "";
-  
-  const ugSelecionada = inputRealUg.value.trim();
-  const termo = valorBusca.toLowerCase().trim();
-  
-  if (termo.length < 2) return; 
+  const inputRealUg = document.getElementById("ug");
+  const inputBuscaUg = document.getElementById("buscaUg");
 
+  if (!containerResultados) return;
+  containerResultados.innerHTML = "";
+
+  // Se o usuário apagar ou alterar o texto digitado, limpa os valores ocultos até selecionar uma opção válida
+  if (inputRealUorg) inputRealUorg.value = "";
+  if (inputRealUg) inputRealUg.value = "";
+  if (inputBuscaUg) inputBuscaUg.value = "";
+
+  const termo = valorBusca.toLowerCase().trim();
+  if (termo.length < 2) return;
+
+  // Pesquisa em todas as UORGs do organograma (sem exigir UG prévia)
   const filtrados = cacheOrganograma.filter(item => {
-    const mesmaUg = String(item.ug).trim() === ugSelecionada;
-    const bateTexto = 
-      item.descricao.toLowerCase().includes(termo) ||
-      item.sipac.toLowerCase().includes(termo) ||
-      item.uorg.toLowerCase().includes(termo);
-      
-    return mesmaUg && bateTexto;
+    return item.descricao.toLowerCase().includes(termo) ||
+           item.sipac.toLowerCase().includes(termo) ||
+           item.uorg.toLowerCase().includes(termo);
   });
 
   if (filtrados.length === 0) {
-    containerResultados.innerHTML = "<div style='padding: 8px; color: #856404; background-color: #fff3cd; font-size: 0.85rem;'>Nenhuma UORG localizada para esta UG.</div>";
+    containerResultados.innerHTML =
+      "<div style='padding: 8px; color: #856404; background-color: #fff3cd; font-size: 0.85rem;'>Nenhuma UORG localizada.</div>";
     return;
   }
 
-  filtrados.slice(0, 8).forEach(item => {
+  filtrados.slice(0, 12).forEach(item => {
+    const ugCod = String(item.ug || "").trim();
+    const ugInfo = cacheUGs.find(u => String(u.ug).trim() === ugCod);
+    const rotuloUg = ugInfo
+      ? `${ugCod} - ${ugInfo.sigla || ugInfo.descricao}`
+      : ugCod;
+
     const divOpcao = document.createElement("div");
-    divOpcao.style.padding = "8px 12px";
-    divOpcao.style.cursor = "pointer";
-    divOpcao.style.borderBottom = "1px solid #e9ecef";
-    divOpcao.style.backgroundColor = "#fff";
-    
+    divOpcao.style = "padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #e9ecef; background: #fff;";
     divOpcao.innerHTML = `
-      <div style="font-weight: bold; color: #1F4E78; font-size: 0.9rem;">${item.descricao}</div>
-      <div style="font-size: 0.75rem; color: #6c757d; margin-top: 2px;">
-        UORG: <span style="color:#333; font-weight:bold;">${item.uorg}</span> | SIPAC: <span style="color:#333; font-weight:bold;">${item.sipac}</span>
+      <div style="font-weight: bold; color: #1F4E78; font-size: 0.9rem;">
+        ${item.uorg} - ${item.descricao}
+      </div>
+      <div style="font-size: 0.78rem; color: #555;">
+        SIPAC: ${item.sipac || "-"} | <b>UG Vinculada:</b> ${rotuloUg}
       </div>
     `;
-    
+
     divOpcao.addEventListener("click", () => {
-      document.getElementById("buscaUorg").value = `${item.uorg} - ${item.descricao}`;
-      if (inputRealUorg) inputRealUorg.value = item.uorg; 
-      containerResultados.innerHTML = ""; 
+      // 1. Preenche a UORG (visível e oculta)
+      const campoBuscaUorg = document.getElementById("buscaUorg");
+      if (campoBuscaUorg) campoBuscaUorg.value = `${item.uorg} - ${item.descricao}`;
+      if (inputRealUorg) inputRealUorg.value = item.uorg;
+
+      // 2. Preenche automaticamente a UG de Registro vinculada (visível e oculta)
+      if (inputRealUg) inputRealUg.value = ugCod;
+      if (inputBuscaUg) {
+        inputBuscaUg.value = ugInfo
+          ? `${ugCod} - ${ugInfo.descricao} (${ugInfo.sigla})`
+          : ugCod;
+      }
+
+      containerResultados.innerHTML = "";
     });
 
     divOpcao.addEventListener("mouseenter", () => divOpcao.style.backgroundColor = "#f8f9fa");
     divOpcao.addEventListener("mouseleave", () => divOpcao.style.backgroundColor = "#fff");
-
     containerResultados.appendChild(divOpcao);
   });
 }
@@ -1084,14 +1099,20 @@ function limparFormulario() {
   // 🔥 AJUSTE ESPECÍFICO: Reseta e bloqueia os campos inteligentes de UG e UORG
   const buscaUorg = document.getElementById("buscaUorg");
   if (buscaUorg) {
-    buscaUorg.disabled = true;
-    buscaUorg.placeholder = "Selecione uma UG de registro primeiro...";
+    buscaUorg.disabled = false;
+    buscaUorg.value = "";
+    buscaUorg.placeholder = "Digite o código UORG, SIPAC ou descrição...";
   }
-  
-  // Garante a limpeza dos IDs ocultos enviados ao banco de dados
+
+  const buscaUg = document.getElementById("buscaUg");
+  if (buscaUg) {
+    buscaUg.value = "";
+    buscaUg.placeholder = "Preenchida automaticamente ao selecionar a UORG...";
+  }
+
   const hiddenUg = document.getElementById("ug");
   if (hiddenUg) hiddenUg.value = "";
-  
+
   const hiddenUorg = document.getElementById("uorg");
   if (hiddenUorg) hiddenUorg.value = "";
 
@@ -1510,59 +1531,274 @@ function adicionarNotaFiscal() {
 }
 
 /**
+ * Adiciona um bloco de Nota Fiscal com marcação de campos obrigatórios
+ */
+function adicionarNotaFiscal() {
+  contadorNotas++;
+  const container = document.getElementById("containerNotasFiscais");
+  const divNota = document.createElement("div");
+  divNota.className = "card nota-fiscal-bloco";
+  divNota.id = `blocoNota_${contadorNotas}`;
+
+  divNota.innerHTML = `
+    <div class="section-title" style="display: flex; justify-content: space-between; background: #e9ecef; color: #333; padding: 8px 12px; border-radius: 4px;">
+      <span>📄 Dados da Nota Fiscal #${contadorNotas}</span>
+      <button type="button" onclick="removerNota(${contadorNotas})" style="color:red; background:none; border:none; cursor:pointer; font-weight:bold;">Excluir Nota</button>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1.5fr 2.5fr 1fr 1fr; margin-bottom: 15px;">
+      <div>
+        <label>Nº Documento/NF <span class="obrigatorio">*</span></label>
+        <input class="nf-numero" placeholder="Ex: 123.456">
+      </div>
+      <div>
+        <label>Fornecedor <span class="obrigatorio">*</span></label>
+        <input class="nf-fornecedor" placeholder="Razão Social">
+      </div>
+      <div>
+        <label>Vlr. Frete</label>
+        <input class="nf-frete" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete();">
+      </div>
+      <div>
+        <label>Vlr. Total NF <span class="obrigatorio">*</span></label>
+        <input class="nf-total" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this)">
+      </div>
+    </div>
+
+    <div class="sub-itens-container" style="background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #e9ecef;">
+      <div class="lista-itens-nota"></div>
+      <button type="button" onclick="adicionarItemNaNota(this)" class="btn-adicionar" style="margin-top: 8px; font-size: 13px;">
+        + Adicionar Item na Nota
+      </button>
+    </div>
+  `;
+
+  container.appendChild(divNota);
+
+  // Insere automaticamente o primeiro item vazio dentro da nota recém-criada
+  const btnAddItem = divNota.querySelector(".btn-adicionar");
+  if (btnAddItem) adicionarItemNaNota(btnAddItem);
+}
+
+/**
+ * Adiciona um item dentro de uma Nota Fiscal específica com marcação de campos obrigatórios
+ */
+/**
  * Adiciona um item dentro de uma Nota Fiscal específica
+ * - Inclui Marca e Rateio Frete (Unit.)
+ * - Campo Informação Complementar ampliado e limitado a 50 caracteres
+ */
+/**
+ * Adiciona um item dentro de uma Nota Fiscal específica com botão de busca CADMAT
  */
 function adicionarItemNaNota(botao) {
   const containerItens = botao.previousElementSibling;
+  const ordemItem = containerItens.querySelectorAll(".item-card").length + 1;
+
   const divItem = document.createElement("div");
   divItem.className = "item-card item-linha-multipla";
 
   divItem.innerHTML = `
-    <div class="linha-item">
-      <label>Descrição (CADMAT)</label>
-      <input class="cadmat-desc" placeholder="Busque o material..." onkeyup="debounceCadmat(this)">
-      <div class="dropdown"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #ced4da; padding-bottom: 5px; margin-bottom: 8px;">
+      <span class="item-ordem">Item ${ordemItem}</span>
+      <button type="button" onclick="removerItemDaNota(this)" style="color: #dc3545; background: none; border: none; cursor: pointer; font-size: 12px; font-weight: bold;">✖ Remover Item</button>
     </div>
 
-    <div class="linha-item">
-      <label>Informação Complementar</label>
-      <input class="info" placeholder="Informações complementares do item">
+    <div class="linha-item" style="margin-bottom: 8px;">
+      <label>Descrição (CADMAT) <span class="obrigatorio">*</span></label>
+      <div style="display: flex; gap: 8px;">
+        <input class="cadmat-desc" readonly placeholder="Nenhum material selecionado..." style="flex: 1; background: #f8f9fa; cursor: default;">
+        <button type="button" onclick="abrirModalCadmat(this)" class="btn-adicionar" style="white-space: nowrap; padding: 8px 14px;">🔍 Selecionar CADMAT</button>
+      </div>
     </div>
 
-    <div class="linha-item">
-      <label>Marca</label>
-      <input class="marca" placeholder="Marca do fabricante">
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-bottom: 8px;">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label>Informação Complementar</label>
+          <small class="contador-info" style="color: #6c757d; font-size: 11px;">0/50</small>
+        </div>
+        <input class="info" maxlength="50" placeholder="Complemento (máx. 50 caracteres)"
+               oninput="this.previousElementSibling.querySelector('.contador-info').innerText = this.value.length + '/50'">
+      </div>
+      <div>
+        <label>Marca</label>
+        <input class="marca" placeholder="Marca do fabricante">
+      </div>
     </div>
 
-    <div class="linha-item" style="display: flex; gap: 10px; align-items: flex-end;">
-      <div style="flex: 1;">
+    <div class="grid-linha-2" style="display: grid; grid-template-columns: 1.3fr 0.7fr 1fr 1fr 1.1fr; gap: 10px; align-items: end;">
+      <div>
         <label>Conta Contábil</label>
         <select class="conta">${listaContasHTML}</select>
       </div>
-      <button onclick="this.closest('.item-card').remove(); recalcularRateioFrete();" style="color:red; border:none; background:none; cursor:pointer;">✖ Remover</button>
-    </div>
-
-    <div class="grid-qtd-valores" style="display: grid; grid-template-columns: 80px 1fr 1fr 1.2fr; gap: 10px; margin-top:10px;">
       <div>
-  <label>Qtd <span class="obrigatorio">*</span></label>
-  <input type="number" class="qtd" value="1" min="1" oninput="atualizarItem(this)">
-</div>
-<div>
-  <label>Valor Unitário <span class="obrigatorio">*</span></label>
-  <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete();">
-</div>
-      <div>
-        <label>Rateio Frete (Unit.)</label>
-        <div class="vlr-rateio badge-rateio" style="background:#f0f0f0; padding:8px; border-radius:4px; font-size:0.9rem;">R$ 0,00</div>
+        <label>Qtd <span class="obrigatorio">*</span></label>
+        <input type="number" class="qtd" value="1" min="1" oninput="recalcularRateioFrete()">
       </div>
       <div>
-        <label>Total Item (c/ Frete)</label>
+        <label>Valor Unitário <span class="obrigatorio">*</span></label>
+        <input class="valor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this); recalcularRateioFrete();">
+      </div>
+      <div>
+        <label>Rateio Frete (Unit.)</label>
+        <div class="vlr-rateio badge-rateio" style="background:#f0f0f0; padding:8px; border-radius:4px; font-size:0.9rem; text-align:right;">R$ 0,00</div>
+      </div>
+      <div>
+        <label>Total do Item (c/ Frete)</label>
         <div class="valor-total-item" style="font-weight:bold; text-align:right; color:#1F4E78; background:#eef2f7; padding:8px; border-radius:4px;">R$ 0,00</div>
       </div>
     </div>
   `;
+
   containerItens.appendChild(divItem);
   recalcularRateioFrete();
+}
+
+// =========================================================================
+// 📦 CONTROLE DO MODAL DE PESQUISA CADMAT (15 ITENS POR PÁGINA)
+// =========================================================================
+let cardItemDestinoCadmat = null;
+let listaResultadosModalCadmat = [];
+let paginaModalCadmat = 1;
+const ITENS_POR_PAGINA_MODAL_CADMAT = 15;
+
+function abrirModalCadmat(botao) {
+  cardItemDestinoCadmat = botao.closest(".item-card");
+  const modal = document.getElementById("modalBuscaCadmat");
+  const input = document.getElementById("inputPesquisaModalCadmat");
+
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
+  input.value = "";
+  document.getElementById("resultadoModalCadmat").innerHTML =
+    "<div style='padding: 30px; text-align: center; color: #666;'>Digite um termo acima e clique em <b>Pesquisar</b>.</div>";
+  document.getElementById("paginacaoModalCadmat").innerHTML = "";
+  setTimeout(() => input.focus(), 50);
+}
+
+function fecharModalCadmat() {
+  const modal = document.getElementById("modalBuscaCadmat");
+  modal.style.display = "none";
+  modal.classList.add("hidden");
+  cardItemDestinoCadmat = null;
+}
+
+function executarBuscaModalCadmat() {
+  const termo = document.getElementById("inputPesquisaModalCadmat").value.trim();
+  const containerRes = document.getElementById("resultadoModalCadmat");
+  const containerPag = document.getElementById("paginacaoModalCadmat");
+
+  if (!termo || termo.length < 2) {
+    containerRes.innerHTML = "<div style='padding: 20px; text-align: center; color: #856404; background: #fff3cd;'>Digite pelo menos 2 caracteres para pesquisar.</div>";
+    containerPag.innerHTML = "";
+    return;
+  }
+
+  containerRes.innerHTML = "<div style='padding: 30px; text-align: center; color: #1F4E78;'>⏳ Buscando materiais no catálogo...</div>";
+  containerPag.innerHTML = "";
+
+  google.script.run
+    .withSuccessHandler(function(lista) {
+      listaResultadosModalCadmat = lista || [];
+      paginaModalCadmat = 1;
+      renderizarPaginaModalCadmat();
+    })
+    .withFailureHandler(function(err) {
+      containerRes.innerHTML = `<div style='padding: 20px; color: #dc3545;'>Erro ao consultar CADMAT: ${err.message}</div>`;
+    })
+    .consultarCadmat(termo);
+}
+
+function renderizarPaginaModalCadmat() {
+  const containerRes = document.getElementById("resultadoModalCadmat");
+  const containerPag = document.getElementById("paginacaoModalCadmat");
+
+  if (!listaResultadosModalCadmat.length) {
+    containerRes.innerHTML = "<div style='padding: 30px; text-align: center; color: #666;'>Nenhum material encontrado para o termo pesquisado.</div>";
+    containerPag.innerHTML = "";
+    return;
+  }
+
+  const totalItens = listaResultadosModalCadmat.length;
+  const totalPaginas = Math.ceil(totalItens / ITENS_POR_PAGINA_MODAL_CADMAT);
+  const inicio = (paginaModalCadmat - 1) * ITENS_POR_PAGINA_MODAL_CADMAT;
+  const fatia = listaResultadosModalCadmat.slice(inicio, inicio + ITENS_POR_PAGINA_MODAL_CADMAT);
+
+  let html = `
+    <table style="width: 100%; border-collapse: collapse; margin: 0; font-size: 13px;">
+      <thead>
+        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6; text-align: left;">
+          <th style="padding: 10px; width: 110px;">Código</th>
+          <th style="padding: 10px;">Descrição do Material</th>
+          <th style="padding: 10px; width: 110px;">Conta</th>
+          <th style="padding: 10px; width: 95px; text-align: center;">Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  fatia.forEach((item, idx) => {
+    const indiceReal = inicio + idx;
+    html += `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 8px 10px; font-weight: bold; color: #1F4E78;">${item.codigo}</td>
+        <td style="padding: 8px 10px;">${item.material}</td>
+        <td style="padding: 8px 10px; color: #555;">${item.conta || "-"}</td>
+        <td style="padding: 8px 10px; text-align: center;">
+          <button type="button" onclick="confirmarSelecaoModalCadmat(${indiceReal})"
+                  style="background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">
+            Selecionar
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += "</tbody></table>";
+  containerRes.innerHTML = html;
+
+  containerPag.innerHTML = `
+    <span style="font-size: 12px; color: #666;">
+      Página <b>${paginaModalCadmat}</b> de <b>${totalPaginas}</b> (${totalItens} encontrados)
+    </span>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" onclick="mudarPaginaModalCadmat(-1)" ${paginaModalCadmat === 1 ? "disabled" : ""}
+              style="padding: 5px 12px; border: 1px solid #ced4da; background: #fff; border-radius: 4px; cursor: pointer;">
+        ◀ Anterior
+      </button>
+      <button type="button" onclick="mudarPaginaModalCadmat(1)" ${paginaModalCadmat === totalPaginas ? "disabled" : ""}
+              style="padding: 5px 12px; border: 1px solid #ced4da; background: #fff; border-radius: 4px; cursor: pointer;">
+        Próxima ▶
+      </button>
+    </div>
+  `;
+}
+
+function mudarPaginaModalCadmat(delta) {
+  paginaModalCadmat += delta;
+  renderizarPaginaModalCadmat();
+  document.getElementById("resultadoModalCadmat").scrollTop = 0;
+}
+
+function confirmarSelecaoModalCadmat(indiceReal) {
+  const item = listaResultadosModalCadmat[indiceReal];
+  if (!item || !cardItemDestinoCadmat) return;
+
+  const campoDesc = cardItemDestinoCadmat.querySelector(".cadmat-desc");
+  if (campoDesc) {
+    campoDesc.value = `${item.codigo} - ${item.material}`;
+    campoDesc.dataset.codigo = item.codigo;
+    campoDesc.dataset.descricao = item.material;
+  }
+
+  // Preenche automaticamente a Conta Contábil vinculada ao CADMAT, se existir na lista
+  const selectConta = cardItemDestinoCadmat.querySelector(".conta");
+  if (selectConta && item.conta) {
+    selectConta.value = String(item.conta).trim();
+  }
+
+  fecharModalCadmat();
 }
 
 function recalcularRateioFrete() {

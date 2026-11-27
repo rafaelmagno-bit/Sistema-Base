@@ -1,88 +1,136 @@
 <div id="abaCadastro" class="hidden">
   <div class="cadastro-header">
-    <h2>Novo Cadastro de Entrada</h2>
+    <div>
+      <h2>Novo Cadastro de Entrada</h2>
+      <small style="color: #666;">Campos marcados com <span class="obrigatorio">*</span> são obrigatórios.</small>
+    </div>
     <button onclick="limparFormulario()" class="btn-limpar">🧹 Limpar Tudo</button>
   </div>
 
+  <!-- SEÇÃO 1: DADOS DO PROCESSO -->
   <div class="card">
     <div class="section-title">1. Dados do Processo</div>
-    
     <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom: 15px;">
-      <div><label>Tipo de Entrada</label><select id="tipo" onchange="ajustarCamposCondicionais()"></select></div>
-      <div><label>Nº Processo</label><input id="processo" placeholder="23076.000000/2026-00" maxlength="25" onblur="finalizarMascaraProcesso(this)" oninput="mascaraProcessoDinamica(this)"></div>
-      <div><label>Data do Processo/Doc</label><input id="data" type="date"></div>
+      <div>
+        <label for="tipo">Tipo de Entrada <span class="obrigatorio">*</span></label>
+        <select id="tipo" onchange="ajustarCamposCondicionais()"></select>
+      </div>
+      <div>
+        <label for="processo">Nº Processo <span class="obrigatorio">*</span></label>
+        <input id="processo" placeholder="23076.000000/2026-00" maxlength="25" onblur="finalizarMascaraProcesso(this)" oninput="mascaraProcessoDinamica(this)">
+      </div>
+      <div>
+        <label for="data">Data do Processo/Doc <span class="obrigatorio">*</span></label>
+        <input id="data" type="date">
+      </div>
     </div>
 
     <div class="grid" style="grid-template-columns: 1fr 1fr;">
+      <!-- 1º: UORG SOLICITANTE (HABILITADA DESDE O INÍCIO) -->
       <div style="position: relative;">
-        <label for="buscaUg">UG Registro</label>
-        <input type="text" id="buscaUg" placeholder="Digite o código, descrição ou sigla..." 
-               oninput="buscarUgDinamico(this.value)" autocomplete="off"
-               style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
-        <div id="resultadoBuscaUg" 
-             style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
-        </div>
-        <input type="hidden" id="ug" name="ug">
-      </div>
-
-      <div style="position: relative;">
-        <label for="buscaUorg">UORG Solicitante</label>
-        <input type="text" id="buscaUorg" placeholder="Selecione uma UG de registro primeiro..." disabled
+        <label for="buscaUorg">UORG Solicitante <span class="obrigatorio">*</span></label>
+        <input type="text" id="buscaUorg" placeholder="Digite o código UORG, SIPAC ou descrição..."
                oninput="buscarUorgDinamico(this.value)" autocomplete="off"
                style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
-        <div id="resultadoBuscaUorg" 
-             style="position: absolute; z-index: 1050; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+        <div id="resultadoBuscaUorg"
+             style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 220px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
         </div>
         <input type="hidden" id="uorg" name="uorg">
       </div>
-    </div>
 
+      <!-- 2º: UG REGISTRO (PREENCHIDA AUTOMATICAMENTE PELA UORG) -->
+      <div style="position: relative;">
+        <label for="buscaUg">UG Registro <span class="obrigatorio">*</span></label>
+        <input type="text" id="buscaUg" readonly placeholder="Preenchida automaticamente ao selecionar a UORG..."
+               style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; background: #f8f9fa; cursor: default;">
+        <div id="resultadoBuscaUg" class="hidden"></div>
+        <input type="hidden" id="ug" name="ug">
+      </div>
+    </div>
   </div>
 
-  <div id="secaoEspecifica" class="card hidden">
+  <!-- SEÇÃO 2: DETALHES ESPECÍFICOS (CONDICIONAIS) -->
+  <div class="card" id="secaoDetalhesEspecificos">
     <div class="section-title">2. Detalhes Específicos</div>
+
+    <!-- Bloco Empenho -->
     <div id="blocoEmpenho" class="hidden">
-      <div class="grid">
-        <div><label>Nº Empenho</label><input id="empenho"></div>
-        
+      <div class="grid" style="grid-template-columns: 1fr 1fr;">
+        <div>
+          <label for="empenho">Nº Empenho <span class="obrigatorio">*</span></label>
+          <input id="empenho" placeholder="Ex: 2026NE000001">
+        </div>
         <div style="position: relative;">
-          <label for="buscaUgEmpenho">UG Empenho</label>
-          <input type="text" id="buscaUgEmpenho" placeholder="Digite o código, descrição ou sigla..." 
+          <label for="buscaUgEmpenho">UG Empenho <span class="obrigatorio">*</span></label>
+          <input type="text" id="buscaUgEmpenho" placeholder="Digite o código, descrição ou sigla..."
                  oninput="buscarUgEmpenhoDinamico(this.value)" autocomplete="off"
                  style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box;">
-          <div id="resultadoBuscaUgEmpenho" 
+          <div id="resultadoBuscaUgEmpenho"
                style="position: absolute; z-index: 1060; width: 100%; background: white; border: 1px solid #ced4da; border-top: none; max-height: 200px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
           </div>
           <input type="hidden" id="ugEmpenho" name="ugEmpenho">
         </div>
       </div>
     </div>
+
+    <!-- Bloco Edital / Beneficiário -->
     <div id="blocoEdital" class="hidden">
-      <div class="grid">
-        <div><label>Título do Edital/Convênio</label><input id="edital"></div>
-        <div><label>Nome do Beneficiário</label><input id="beneficiario"></div>
-        <div><label>CPF Beneficiário</label><input id="cpf"></div>
-        <div><label>SIAPE Beneficiário</label><input id="siape"></div>
+      <div class="grid" style="grid-template-columns: 1fr 2fr 1fr 1fr;">
+        <div>
+          <label for="edital">Edital <span class="obrigatorio">*</span></label>
+          <input id="edital" placeholder="Nº do Edital">
+        </div>
+        <div>
+          <label for="beneficiario">Beneficiário <span class="obrigatorio">*</span></label>
+          <input id="beneficiario" placeholder="Nome completo">
+        </div>
+        <div>
+          <label for="cpf">CPF <span class="obrigatorio">*</span></label>
+          <input id="cpf" placeholder="000.000.000-00">
+        </div>
+        <div>
+          <label for="siape">SIAPE <span class="obrigatorio">*</span></label>
+          <input id="siape" placeholder="Matrícula SIAPE">
+        </div>
       </div>
     </div>
+
+    <!-- Bloco FADE -->
     <div id="blocoFade" class="hidden">
-      <div class="grid"><div><label>Termo de Transferência de Propriedade - FADE</label><input id="fade"></div></div>
+      <div class="grid" style="grid-template-columns: 1fr;">
+        <div>
+          <label for="fade">Projeto FADE <span class="obrigatorio">*</span></label>
+          <input id="fade" placeholder="Código/Título do Projeto FADE">
+        </div>
+      </div>
     </div>
   </div>
 
+  <!-- SEÇÃO 3: DADOS DO CORRESPONSÁVEL -->
   <div class="card">
     <div class="section-title">3. Dados do Corresponsável</div>
     <div class="grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; align-items: flex-end; gap: 10px;">
-      <div style="position:relative;">
-        <label>Nome do Servidor</label>
+      <div style="position: relative;">
+        <label for="nomeServidor">Nome do Servidor <span class="obrigatorio">*</span></label>
         <input id="nomeServidor" onkeyup="filtrarServidores()" placeholder="Digite o nome..." autocomplete="off">
         <div id="dropdownServidores" class="dropdown"></div>
       </div>
-      <div><label>CPF</label><input id="cpfServidor" readonly style="background:#f8f9fa;"></div>
-      <div><label>SIAPE</label><input id="siapeServidor" readonly style="background:#f8f9fa;"></div>
-      <div><label>E-mail</label><input id="emailServidor" placeholder="email@ufpe.br"></div>
-      <div><label>Telefone</label><input id="telefoneServidor" placeholder="(81) 0000-0000"></div>
-      
+      <div>
+        <label for="cpfServidor">CPF <span class="obrigatorio">*</span></label>
+        <input id="cpfServidor" readonly style="background:#f8f9fa;">
+      </div>
+      <div>
+        <label for="siapeServidor">SIAPE <span class="obrigatorio">*</span></label>
+        <input id="siapeServidor" readonly style="background:#f8f9fa;">
+      </div>
+      <div>
+        <label for="emailServidor">E-mail <span class="obrigatorio">*</span></label>
+        <input id="emailServidor" placeholder="email@ufpe.br">
+      </div>
+      <div>
+        <label for="telefoneServidor">Telefone <span class="obrigatorio">*</span></label>
+        <input id="telefoneServidor" placeholder="(81) 0000-0000">
+      </div>
       <div>
         <button type="button" onclick="salvarContatosServidorTela()" title="Salvar contatos na aba SERVIDORES"
                 style="background: #1F4E78; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; height: 36px; display: flex; align-items: center; justify-content: center;">
@@ -105,7 +153,34 @@
     <div><b>Total:</b> <span id="valorTotal" style="color: #28a745; font-weight: bold;">R$ 0,00</span></div>
     <button id="btnSalvar" onclick="salvar()" style="background:#28a745; color:white; padding:10px 40px; border-radius:30px; border:none; font-weight:bold; cursor:pointer;">🚀 FINALIZAR CADASTRO</button>
   </div>
-</div> 
+
+  <!-- MODAL DE PESQUISA CADMAT -->
+<div id="modalBuscaCadmat" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 9999; display: none; justify-content: center; align-items: center;">
+  <div class="card" style="width: 92%; max-width: 820px; max-height: 88vh; display: flex; flex-direction: column; padding: 20px; margin: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 12px;">
+      <h3 style="margin: 0; color: #1F4E78;">📦 Pesquisar Material (CADMAT)</h3>
+      <button type="button" onclick="fecharModalCadmat()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;">✖</button>
+    </div>
+
+    <!-- OBSERVAÇÃO DE ORIENTAÇÃO AO USUÁRIO -->
+    <div style="background: #fff8e1; border-left: 4px solid #f59e0b; color: #78350f; padding: 10px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 14px; line-height: 1.4;">
+      <strong>💡 Orientação:</strong> Priorize a seleção de códigos <b>CADMAT mais genéricos</b> (sem excesso de detalhamentos técnicos na descrição). Utilize o campo <b>Informação Complementar</b> do item para especificar modelo, capacidade ou características específicas.
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+      <input type="text" id="inputPesquisaModalCadmat" placeholder="Digite palavra-chave ou código para pesquisar..."
+             onkeypress="if(event.key === 'Enter'){ event.preventDefault(); executarBuscaModalCadmat(); }"
+             style="flex: 1; padding: 10px; border: 1px solid #ced4da; border-radius: 4px;">
+      <button type="button" onclick="executarBuscaModalCadmat()" class="btn-adicionar" style="padding: 10px 20px;">🔍 Pesquisar</button>
+    </div>
+
+    <div id="resultadoModalCadmat" style="flex: 1; overflow-y: auto; border: 1px solid #eee; border-radius: 4px; min-height: 220px;">
+      <div style="padding: 30px; text-align: center; color: #666;">Digite um termo acima e clique em <b>Pesquisar</b>.</div>
+    </div>
+
+    <div id="paginacaoModalCadmat" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid #eee;"></div>
+  </div>
+</div>
 
 <div id="abaTombamento" class="hidden">
   <div class="home-container">
