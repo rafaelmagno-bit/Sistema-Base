@@ -188,7 +188,7 @@ function abrirCadastroParaEdicao(dados) {
     if (el) el.value = camposCorresp[id] || "";
   });
 
-  // 7. Reconstrói as Notas Fiscais e Itens
+  // 7. Reconstrói as Notas Fiscais e Itens na Tabela Resumo
   const containerNFs = document.getElementById("containerNotasFiscais");
   if (containerNFs && typeof adicionarNotaFiscal === "function") {
     containerNFs.innerHTML = "";
@@ -215,32 +215,20 @@ function abrirCadastroParaEdicao(dados) {
         blocoAtual.querySelector(".nf-total").value = Number(nf.totalNF || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       }
 
-      const listaItensDiv = blocoAtual.querySelector(".lista-itens-nota");
-      const btnAddItem = blocoAtual.querySelector(".sub-itens-container .btn-adicionar");
-
-      if (listaItensDiv && btnAddItem && nf.itens && nf.itens.length > 0) {
-        listaItensDiv.innerHTML = "";
-
-        // Calcula o frete unitário salvo na planilha para descontar do valor unitário bruto
+      if (nf.itens && nf.itens.length > 0) {
         const totalUnidadesNF = nf.itens.reduce((acc, item) => acc + (Number(item.qtd) || 0), 0);
         const freteUnitarioSalvo = (vlrFreteNF > 0 && totalUnidadesNF > 0) ? (vlrFreteNF / totalUnidadesNF) : 0;
 
+        blocoNotaAlvoModal = blocoAtual;
+        cardItemEmEdicaoModal = null;
+
         nf.itens.forEach(it => {
-          adicionarItemNaNota(btnAddItem);
-          const cards = listaItensDiv.querySelectorAll(".item-card");
-          const card = cards[cards.length - 1];
-          if (!card) return;
+          limparCamposModalItemNF();
+          document.getElementById("modalItemCadmat").value = it.cadmat ? `${it.cadmat} - ${it.descricao}` : (it.descricao || "");
+          document.getElementById("modalItemInfo").value = it.info || "";
+          document.getElementById("modalItemMarca").value = it.marca || "";
 
-          const campoDesc = card.querySelector(".cadmat-desc");
-          if (campoDesc) {
-            campoDesc.value = it.cadmat ? `${it.cadmat} - ${it.descricao}` : (it.descricao || "");
-            campoDesc.dataset.codigo = it.cadmat || "";
-            campoDesc.dataset.descricao = it.descricao || "";
-          }
-
-          if (card.querySelector(".info")) card.querySelector(".info").value = it.marca || "";
-
-          const selectConta = card.querySelector(".conta");
+          const selectConta = document.getElementById("modalItemConta");
           if (selectConta && it.conta) {
             if (![...selectConta.options].some(o => o.value === it.conta)) {
               selectConta.innerHTML += `<option value="${it.conta}">${it.conta}</option>`;
@@ -248,24 +236,18 @@ function abrirCadastroParaEdicao(dados) {
             selectConta.value = it.conta;
           }
 
-          if (card.querySelector(".qtd")) card.querySelector(".qtd").value = it.qtd || 1;
-
-          // Desconta o rateio de frete para preencher o valor unitário puro da NF
+          document.getElementById("modalItemQtd").value = it.qtd || 1;
           const valorUnitPuro = Math.max(0, Number(it.valorUnit || 0) - freteUnitarioSalvo);
-          const campoValor = card.querySelector(".valor");
-          if (campoValor) {
-            campoValor.value = valorUnitPuro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          }
+          document.getElementById("modalItemValor").value = valorUnitPuro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+          confirmarItemModalNF(true);
         });
+
+        blocoNotaAlvoModal = null;
       }
     });
 
-    // Chama a função oficial do 3_scripts.html que calcula rateio, total do item e total geral
-    if (typeof recalcularRateioFrete === "function") {
-      recalcularRateioFrete();
-    }
-  }
-    if (typeof atualizarResumoTotal === "function") atualizarResumoTotal();
+    recalcularRateioFrete();
   }
 
 

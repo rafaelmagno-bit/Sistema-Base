@@ -182,6 +182,75 @@
   </div>
 </div>
 
+<!-- MODAL DE INCLUSÃO / EDIÇÃO RÁPIDA DE ITEM NA NOTA FISCAL -->
+<div id="modalItemNotaFiscal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 9998; display: none; justify-content: center; align-items: center;">
+  <div class="card" style="width: 92%; max-width: 720px; padding: 22px; margin: 0; box-shadow: 0 8px 25px rgba(0,0,0,0.2);">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+      <h3 id="tituloModalItemNF" style="margin: 0; color: #1F4E78;">➕ Incluir Item na Nota Fiscal</h3>
+      <button type="button" onclick="fecharModalItemNF()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;">✖</button>
+    </div>
+
+    <!-- Campo CADMAT -->
+    <div style="margin-bottom: 12px;">
+      <label>Descrição (CADMAT) <span class="obrigatorio">*</span></label>
+      <div style="display: flex; gap: 8px;">
+        <input id="modalItemCadmat" readonly placeholder="Clique no botão ao lado para pesquisar o material..."
+               style="flex: 1; background: #f8f9fa; cursor: default;">
+        <button type="button" onclick="abrirModalCadmatParaItemModal()" class="btn-adicionar" style="white-space: nowrap; padding: 8px 14px;">
+          🔍 Selecionar CADMAT
+        </button>
+      </div>
+    </div>
+
+    <!-- Informação Complementar (50 chars) + Marca -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px;">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label>Informação Complementar</label>
+          <small id="contadorModalItemInfo" style="color: #6c757d; font-size: 11px;">0/50</small>
+        </div>
+        <input id="modalItemInfo" maxlength="50" placeholder="Complemento (máx. 50 caracteres)"
+               oninput="document.getElementById('contadorModalItemInfo').innerText = this.value.length + '/50'">
+      </div>
+      <div>
+        <label>Marca</label>
+        <input id="modalItemMarca" placeholder="Marca do fabricante">
+      </div>
+    </div>
+
+    <!-- Conta Contábil + Qtd + Valor Unitário -->
+    <div style="display: grid; grid-template-columns: 1.6fr 0.7fr 1fr; gap: 12px; margin-bottom: 18px;">
+      <div>
+        <label>Conta Contábil</label>
+        <select id="modalItemConta"></select>
+      </div>
+      <div>
+        <label>Qtd <span class="obrigatorio">*</span></label>
+        <input type="number" id="modalItemQtd" value="1" min="1">
+      </div>
+      <div>
+        <label>Valor Unitário <span class="obrigatorio">*</span></label>
+        <input id="modalItemValor" placeholder="R$ 0,00" oninput="formatarCampoMoeda(this)">
+      </div>
+    </div>
+
+    <!-- Botões de Ação -->
+    <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #eee; padding-top: 14px;">
+      <button type="button" onclick="fecharModalItemNF()" style="padding: 9px 16px; border: 1px solid #ced4da; background: #fff; border-radius: 4px; cursor: pointer;">
+        Cancelar
+      </button>
+      <button type="button" id="btnSalvarEContinuarItemNF" onclick="confirmarItemModalNF(true)"
+              style="padding: 9px 16px; border: none; background: #1F4E78; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">
+        + Salvar e Adicionar Próximo
+      </button>
+      <button type="button" onclick="confirmarItemModalNF(false)"
+              style="padding: 9px 18px; border: none; background: #28a745; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">
+        ✔ Salvar e Fechar
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="abaTombamento" class="hidden">
   <div class="home-container">
     <div class="home-header">
